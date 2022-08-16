@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.3.44">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.3.0" />
+    <PackageReference Include="Moq" Version="4.18.2" />
+    <PackageReference Include="MSTest.TestAdapter" Version="2.2.10" />
+    <PackageReference Include="MSTest.TestFramework" Version="2.2.10" />
+    <PackageReference Include="coverlet.collector" Version="3.1.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BlacklistManager.Database\BlacklistManager.Database.csproj" />
+    <ProjectReference Include="..\BlacklistManager.Domain\BlacklistManager.Domain.csproj" />
+    <ProjectReference Include="..\BlacklistManager.Infrastructure\BlacklistManager.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>    
+    <None Update="Mocks\Data\SignedConsensusActivationJSON_NotValidPayload_AcceptanceCourtOrderHashChanged.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>    
+    <None Update="Mocks\Data\SignedConsensusActivationJSON_NotValidSignature_AcceptanceCourtOrderHashChanged.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>    
+    <None Update="Mocks\Data\SignedConsensusActivationJSON_NotValidPayload_NoEnforceAtHeight.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Mocks\Data\SignedConsensusActivationJSON_NotValidSignature_EnforceAtHeightChanged.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="Mocks\Data\SignedConsensusActivationJSON_Valid.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

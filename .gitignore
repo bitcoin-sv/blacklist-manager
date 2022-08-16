@@ -1,0 +1,20 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+
+#Added manually
+/src/Common/TestResults
+/src/BlacklistManager/BlacklistManager.Cli/Properties/launchSettings.json
+*.user
+*.development.json
+bin
+obj
+TestResults
+out
+/.vs
+/src/.scannerwork
+/src/.sonarqube/conf
+/.pumafile
+/src/BlacklistManager/.vs
+/src/.vs

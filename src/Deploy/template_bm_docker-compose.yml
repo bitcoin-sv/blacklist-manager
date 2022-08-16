@@ -1,0 +1,39 @@
+# Copyright (c) 2020 Bitcoin Association
+ 
+version: '3.4'
+ 
+services:
+ 
+ bmdata:
+  container_name: bmdata
+  image: postgres:12
+  environment:
+   - POSTGRES_PASSWORD=${POSTGRESDB_PASSWORD}
+  volumes:
+   - bmdatavolume:/var/lib/postgresql/data
+  networks:
+   - bmnetwork
+  shm_size: 512mb 
+  
+ bmapp:
+  container_name: bmapp
+  image: blacklistmanager:{{VERSIONBM}}
+  depends_on:
+   - bmdata
+  environment:
+   - BlacklistManagerConnectionStrings:DBConnectionString=Server=bmdata;Port=5432;User Id=frozenfund;Database=frozenfund;Password=${BMAPP_DB_PASSWORD};
+   - BlacklistManagerConnectionStrings:DBConnectionStringMaster=Server=bmdata;Port=5432;User Id=postgres;Database=frozenfund;Password=${POSTGRESDB_PASSWORD};
+   - AppSettings:BitcoinNetwork=${BITCOIN_NETWORK}
+   - AppSettings:EncryptionKey=${ENCRYPTION_KEY}
+   - AppSettings:REST_APIKey=${BMAPP_REST_APIKEY}
+   - AppSettings:BackgroundJobDelayTime=${BACKGROUND_JOB_DELAY_TIME}
+  networks:
+   - bmnetwork
+  volumes:
+   - ./certificates/:/certificates/:ro   
+ 
+volumes:
+ bmdatavolume:
+ 
+networks:
+ bmnetwork:

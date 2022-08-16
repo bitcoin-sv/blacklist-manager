@@ -1,0 +1,8 @@
+{
+  "payload": "{\"name\":\"simon\",\"colour\":\"blue\"}",
+  "signatureType": "bitcoin",
+  "signature": "304402200e69f3c837e89a6e11f0a93be3aad1a437505523e4b6dfbe28dd86eb4256231602201eeb8c9202cd3ab5fd22bee4e8c173d3168dbd263d20ac870a63858b0c77c039",
+  "publicKey": "037e0bc08eab12fa3188095373a05c36db918c8f4805958491f059b9ee5e398a27",
+  "encoding": "UTF-8",
+  "mimetype": "application/json"
+}

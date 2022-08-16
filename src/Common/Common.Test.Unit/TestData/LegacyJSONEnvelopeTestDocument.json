@@ -1,0 +1,7 @@
+﻿{
+  "payload": "{\"name\":\"simon\",\"colour\":\"blue\"}",
+  "signature": "30450221008209b19ffe2182d859ce36fdeff5ded4b3f70ad77e0e8715238a539db97c1282022043b1a5b260271b7c833ca7c37d1490f21b7bd029dbb8970570c7fdc3df5c93ab",
+  "publicKey": "02b01c0c23ff7ff35f774e6d3b3491a123afb6c98965054e024d2320f7dbd25d8a",
+  "encoding": "UTF-8",
+  "mimetype": "application/json"
+}

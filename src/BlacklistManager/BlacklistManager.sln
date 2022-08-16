@@ -1,0 +1,89 @@
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29806.167
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlacklistManager.Domain", "BlacklistManager.Domain\BlacklistManager.Domain.csproj", "{482CEEDD-EFB3-4979-95FB-75E10C1CEFE2}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlacklistManager.API.Rest", "BlacklistManager.API.Rest\BlacklistManager.API.Rest.csproj", "{C5430E2D-6674-448B-9744-E75DE0B53965}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlacklistManager.Infrastructure", "BlacklistManager.Infrastructure\BlacklistManager.Infrastructure.csproj", "{00E73360-5593-4DDC-8A09-E1A4DEB28322}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlacklistManager.Test.Functional", "BlacklistManager.Test.Functional\BlacklistManager.Test.Functional.csproj", "{43F8E3A6-E435-4F4A-8E11-A5D176BFF73E}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlacklistManager.Test.Unit", "BlacklistManager.Test.Unit\BlacklistManager.Test.Unit.csproj", "{690150F3-60AE-48A7-82E7-23B0057C9C55}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Database", "Database", "{9FC7A920-C990-4AED-8DBD-ED32E1B5006C}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Docker", "Docker", "{CCE2C901-B80A-450C-81EF-1E79EA7B2C95}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Dev", "Dev", "{CDA8B41F-7E22-475C-9167-04B8D50ED9AE}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose-dev.yml = docker-compose-dev.yml
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Model", "Model", "{3E93EC3A-F5BF-4F93-AC56-D0C11412C0EC}"
+	ProjectSection(SolutionItems) = preProject
+		Database\Model\01_CreateDB.sql = Database\Model\01_CreateDB.sql
+		Database\Model\02_CreateTables.sql = Database\Model\02_CreateTables.sql
+		Database\Model\03_CreateUser.sql = Database\Model\03_CreateUser.sql
+		Database\Model\BlacklistManager.plantuml = Database\Model\BlacklistManager.plantuml
+		Database\Model\out\BlacklistManager\BlacklistManager_DB.png = Database\Model\out\BlacklistManager\BlacklistManager_DB.png
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Common", "..\Common\Common\Common.csproj", "{CF31A77C-9A5E-4818-AB08-05FF364A2DCF}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BlacklistManager.Web.ApiRestRunner", "BlacklistManager.Web.ApiRestRunner\BlacklistManager.Web.ApiRestRunner.csproj", "{E362DDC1-5E8F-490F-8785-6A5FC35A7EA5}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Prod", "Prod", "{637D0A85-6A12-48E9-B6BA-886E5EE8C0E6}"
+	ProjectSection(SolutionItems) = preProject
+		docker-compose.yml = docker-compose.yml
+		..\DockerHowTo.md = ..\DockerHowTo.md
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{482CEEDD-EFB3-4979-95FB-75E10C1CEFE2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{482CEEDD-EFB3-4979-95FB-75E10C1CEFE2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{482CEEDD-EFB3-4979-95FB-75E10C1CEFE2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{482CEEDD-EFB3-4979-95FB-75E10C1CEFE2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C5430E2D-6674-448B-9744-E75DE0B53965}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C5430E2D-6674-448B-9744-E75DE0B53965}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C5430E2D-6674-448B-9744-E75DE0B53965}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C5430E2D-6674-448B-9744-E75DE0B53965}.Release|Any CPU.Build.0 = Release|Any CPU
+		{00E73360-5593-4DDC-8A09-E1A4DEB28322}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00E73360-5593-4DDC-8A09-E1A4DEB28322}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00E73360-5593-4DDC-8A09-E1A4DEB28322}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00E73360-5593-4DDC-8A09-E1A4DEB28322}.Release|Any CPU.Build.0 = Release|Any CPU
+		{43F8E3A6-E435-4F4A-8E11-A5D176BFF73E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{43F8E3A6-E435-4F4A-8E11-A5D176BFF73E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{43F8E3A6-E435-4F4A-8E11-A5D176BFF73E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{43F8E3A6-E435-4F4A-8E11-A5D176BFF73E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{690150F3-60AE-48A7-82E7-23B0057C9C55}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{690150F3-60AE-48A7-82E7-23B0057C9C55}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{690150F3-60AE-48A7-82E7-23B0057C9C55}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{690150F3-60AE-48A7-82E7-23B0057C9C55}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CF31A77C-9A5E-4818-AB08-05FF364A2DCF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CF31A77C-9A5E-4818-AB08-05FF364A2DCF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF31A77C-9A5E-4818-AB08-05FF364A2DCF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CF31A77C-9A5E-4818-AB08-05FF364A2DCF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E362DDC1-5E8F-490F-8785-6A5FC35A7EA5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E362DDC1-5E8F-490F-8785-6A5FC35A7EA5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E362DDC1-5E8F-490F-8785-6A5FC35A7EA5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E362DDC1-5E8F-490F-8785-6A5FC35A7EA5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{CDA8B41F-7E22-475C-9167-04B8D50ED9AE} = {CCE2C901-B80A-450C-81EF-1E79EA7B2C95}
+		{3E93EC3A-F5BF-4F93-AC56-D0C11412C0EC} = {9FC7A920-C990-4AED-8DBD-ED32E1B5006C}
+		{637D0A85-6A12-48E9-B6BA-886E5EE8C0E6} = {CCE2C901-B80A-450C-81EF-1E79EA7B2C95}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5CE13035-1878-416C-A1F0-AD16F995FDC8}
+	EndGlobalSection
+EndGlobal
