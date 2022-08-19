@@ -10,5 +10,6 @@ namespace BlacklistManager.Domain.Models
     public int LegalEntityEndpointId { get; set; }
     public string LegalEntityEndpointUrl { get; set; }
     public string LegalEntityEndpointApiKey { get; set; }
+    public int RetryCount { get; set; }
   }
 }

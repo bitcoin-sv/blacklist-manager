@@ -50,5 +50,37 @@ namespace Common.SmartEnums
 
     public int CompareTo(object obj) => Id.CompareTo(((Enumeration)obj).Id);
 
+    public static bool operator !=(Enumeration a, Enumeration b)
+    {
+      if ((a is null && b is not null) ||
+          (a is not null && b is null))
+      {
+        return true;
+      }
+
+      if (a is not null && b is not null)
+      {
+        return a.Id != b.Id;
+      }
+      return false;
+    }
+    public static bool operator ==(Enumeration a, Enumeration b)
+    {
+      if (a is null && b is null)
+      {
+        return true;
+      }
+
+      if (a is not null && b is not null)
+      {
+        return a.Id == b.Id;
+      }
+
+      return false;
+    }
+
+    public static implicit operator string(Enumeration documentType) => documentType.Name;
+
+    public static implicit operator int(Enumeration documentType) => documentType.Id;
   }
 }

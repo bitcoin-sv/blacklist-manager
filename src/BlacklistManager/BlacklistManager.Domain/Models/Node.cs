@@ -2,7 +2,6 @@
 
 using Common;
 using System;
-using System.Net.Http;
 
 namespace BlacklistManager.Domain.Models
 {
@@ -68,7 +67,7 @@ namespace BlacklistManager.Domain.Models
 
     }
 
-    public void SetError(HttpRequestException httpException)
+    public void SetError(Exception httpException)
     {
       LastError = httpException.Message;
       LastErrorAt = DateTime.UtcNow;

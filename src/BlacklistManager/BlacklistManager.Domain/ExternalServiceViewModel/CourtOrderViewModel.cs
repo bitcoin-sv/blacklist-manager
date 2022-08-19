@@ -1,13 +1,14 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
 using Common.SmartEnums;
+using NBitcoin;
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace BlacklistManager.Domain.ExternalServiceViewModel
 {
-  public class CourtOrder
+  public class CourtOrderViewModel
   {
     [JsonPropertyName("documentType")]
     public string DocumentType { get; set; }
@@ -21,6 +22,9 @@ namespace BlacklistManager.Domain.ExternalServiceViewModel
     [JsonPropertyName("freezeCourtOrderHash")]
     public string FreezeCourtOrderHash { get; set; }
 
+    [JsonPropertyName("blockchain")]
+    public string Blockchain { get; set; }
+
     [JsonPropertyName("validFrom")]
     public DateTime? ValidFrom { get; set; }
 
@@ -30,6 +34,9 @@ namespace BlacklistManager.Domain.ExternalServiceViewModel
     [JsonPropertyName("funds")]
     public List<Fund> Funds { get; set; }
 
+    [JsonPropertyName("destination")]
+    public ConfiscationDestinationVM Destination { get; set; }
+
     [JsonPropertyName("remarks")]
     public string Remarks { get; set; }
 
@@ -37,13 +44,13 @@ namespace BlacklistManager.Domain.ExternalServiceViewModel
     public string Author { get; set; }
 
     [JsonPropertyName("createdAt")]
-    public DateTimeOffset? CreatedAt { get; set; }
+    public DateTime? CreatedAt { get; set; }
 
     [JsonPropertyName("signedDate")]
-    public DateTimeOffset SignedDate { get; set; }
+    public DateTime SignedDate { get; set; }
 
     [JsonPropertyName("discoveryDate")]
-    public DateTime DiscoveryDate { get; set; }
+    public DateTime? DiscoveryDate { get; set; }
 
     [JsonPropertyName("discoveryBlockHash")]
     public string DiscoveryBlockHash { get; set; }
@@ -62,16 +69,24 @@ namespace BlacklistManager.Domain.ExternalServiceViewModel
       return null;
     }
 
-    public Domain.Models.CourtOrder ToDomainObject(string courtOrderHash)
+    public Domain.Models.CourtOrder ToDomainObject(string courtOrderHash, Network network)
     {
-      var courtOrder = new Domain.Models.CourtOrder(
-        this.CourtOrderId,
-        courtOrderHash,
-        (DocumentType)DocumentType,
-        ToDateTime(ValidFrom),
-        null,
-        this.FreezeCourtOrderId,
-        this.FreezeCourtOrderHash);
+      var courtOrder = new Models.CourtOrder
+      {
+        CourtOrderId = CourtOrderId,
+        CourtOrderHash = courtOrderHash,
+        DocumentType = (DocumentType)DocumentType,
+        ValidFrom = ToDateTime(ValidFrom),
+        FreezeCourtOrderId = FreezeCourtOrderId,
+        FreezeCourtOrderHash = FreezeCourtOrderHash,
+        Blockchain = Blockchain,
+        SignedDate = SignedDate,
+        Destination = new Models.ConfiscationDestination 
+        { 
+          Address = Destination?.Address,
+          Amount = Destination?.Amount
+        }
+      };
       if (Funds != null)
       {
         foreach (var fund in Funds)
@@ -81,12 +96,14 @@ namespace BlacklistManager.Domain.ExternalServiceViewModel
           {
             courtOrder.AddFund(new Domain.Models.TxOut(
               fund.TxOut.TxId,
-              fund.TxOut.Vout));
+              fund.TxOut.Vout),
+              fund.Value);
           }
         }
       }
       return courtOrder;
     }
+
   }
 
   public class Fund
@@ -99,6 +116,9 @@ namespace BlacklistManager.Domain.ExternalServiceViewModel
 
     [JsonPropertyName("discoveredFrom")]
     public List<FundDiscoveredFrom> DiscoveredFrom { get; set; }
+
+    [JsonPropertyName("value")]
+    public long Value { get; set; }
   }
 
   public class TxOut
@@ -117,5 +137,14 @@ namespace BlacklistManager.Domain.ExternalServiceViewModel
 
     [JsonPropertyName("txOut")]
     public TxOut TxOut { get; set; }
+  }
+
+  public class ConfiscationDestinationVM
+  {
+    [JsonPropertyName("address")]
+    public string Address { get; set; }
+
+    [JsonPropertyName("amount")]
+    public long Amount { get; set; }
   }
 }

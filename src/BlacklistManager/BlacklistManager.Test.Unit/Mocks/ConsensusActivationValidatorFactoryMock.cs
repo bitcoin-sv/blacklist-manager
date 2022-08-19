@@ -1,5 +1,6 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
+using BlacklistManager.Domain.Actions;
 using BlacklistManager.Domain.Models;
 using Moq;
 using System.Threading.Tasks;

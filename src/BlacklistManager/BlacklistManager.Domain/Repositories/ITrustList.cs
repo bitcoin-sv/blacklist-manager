@@ -1,6 +1,7 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using BlacklistManager.Domain.Models;
 
 namespace BlacklistManager.Domain.Repositories
@@ -8,25 +9,26 @@ namespace BlacklistManager.Domain.Repositories
 
   public interface ITrustListRepository
   {
-    public bool IsPublicKeyTrusted(string publicKey);
+    Task<bool> IsPublicKeyTrustedAsync(string publicKey);
     
     /// <summary>
     /// Returns null if key already exists
     /// </summary>
-    TrustListItem CreatePublicKey(string publicKey, bool trusted, string remarks);
+    Task<TrustListItem> CreatePublicKeyAsync(string publicKey, bool trusted, string remarks);
 
     /// <summary>
     /// Updates existing entry, returns false if it does not exists
     /// </summary>
-    bool UpdatePublicKey(string publicKey, bool trusted, string remarks);
+    Task<bool> UpdatePublicKeyAsync(string publicKey, bool trusted, string remarks, string replacedBy);
 
-    IEnumerable<TrustListItem> GetPublicKeys();
+    Task<IEnumerable<TrustListItem>> GetPublicKeysAsync();
 
-    TrustListItem GetPublicKey(string publicKey);
+    Task<TrustListItem> GetPublicKeyAsync(string publicKey);
 
-    int DeletePublicKey(string publicKey);
+    Task<int> DeletePublicKeyAsync(string publicKey);
 
+    public Task<List<TrustListItem>> GetTrustListChainAsync(string publicKey);
   }
 
-  
+
 }

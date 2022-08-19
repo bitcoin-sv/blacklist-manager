@@ -5,22 +5,22 @@ using BlacklistManager.Domain.Actions;
 using BlacklistManager.Domain.BackgroundJobs;
 using BlacklistManager.Domain.ExternalServices;
 using BlacklistManager.Domain.Repositories;
-using BlacklistManager.Infrastructure.Authentication;
 using BlacklistManager.Infrastructure.Repositories;
 using BlacklistManager.Test.Functional.MockServices;
 using BlacklistManager.Test.Functional.Server;
 using Common;
+using Common.Bitcoin;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NBitcoin;
-using Newtonsoft.Json;
+using NBitcoin.DataEncoders;
 using System.IO;
 using System.Net.Http;
 using System.Net.Mime;
 using System.Text;
-using System.Threading;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace BlacklistManager.Test.Functional
@@ -35,97 +35,119 @@ namespace BlacklistManager.Test.Functional
     public INodeRepository NodeRepository { get; private set; }
     public ITrustListRepository TrustlistRepository { get; private set; }
     public ILegalEntityRepository LegalEntityRepository { get; private set; }
+    public INodes Nodes { get; private set; }
 
-    private static bool providerSet = false;
-    private readonly string dbConnectionString;
-    protected Microsoft.AspNetCore.TestHost.TestServer server;
-    protected System.Net.Http.HttpClient client;
-    protected IDomainAction domainLogic;
-    protected BitcoindFactoryMock bitcoindFactory;
-    protected LegalEntityFactoryMock legalEntityFactory;
-    protected BackgroundJobsMock backgroundJobs;
-    protected ILogger loggerTest;
-    protected PropagationEventsMock propagationEvents;
+    private static bool _providerSet = false;
+    private readonly string _dbConnectionString;
+    protected Microsoft.AspNetCore.TestHost.TestServer Server { get; private set; }
+    protected System.Net.Http.HttpClient Client { get; private set; }
+    protected ICourtOrders CourtOrders { get; private set; }
+    protected ILegalEndpoints LegalEndpoints { get; private set; }
+    protected BitcoinFactoryMock BitcoindFactory { get; private set; }
+    protected LegalEntityFactoryMock LegalEntityFactory { get; private set; }
+    protected BackgroundJobsMock BackgroundJobs { get; private set; }
+    protected ILogger LoggerTest { get; private set; }
+    protected ILoggerFactory LoggerFactory { get; private set; }
+    protected PropagationEventsMock PropagationEvents { get; private set; }
+
+    protected const string TEST_PRIVATE_KEY_WIF = "cNpxQaWe36eHdfU3fo2jHVkWXVt5CakPDrZSYguoZiRHSz9rq8nF";
+    protected const string TEST_PUBLIC_KEY = "027ae06a5b3fe1de495fa9d4e738e48810b8b06fa6c959a5305426f78f42b48f8c";
+    protected const string TEST_ADDRESS = "msRNSw5hHA1W1jXXadxMDMQCErX1X8whTk";
+
+    protected const string TEST_PRIVATE_KEY_WIF_ALT1 = "cTtRXJv1c6aTDB2VGaTFPvbi6PJqrhVdarZnh2Ar7yXHYprdp8EG";
+    protected const string TEST_PUBLIC_KEY_ALT1 = "025ee396c4025bc2bc85d8f5005e5d01ef7cf65eec4b8ffe6e473ff108c562e572";
+    protected const string TEST_PRIVATE_KEY_WIF_ALT2 = "cVs34NMV54AAhQb1Rx3G1L9MH8ZkBTsQ6hw3QMFj3Dw9W6wEYBwq";
+    protected const string TEST_PUBLIC_KEY_ALT2 = "02a0ef716d065bdca562b17059f019722ab652e5b2215bcd71e513f1f428dae049";
 
     public const string LOG_CATEGORY = "BlacklistManager.Test.Functional";
 
-    public static AutoResetEvent SyncTest = new AutoResetEvent(true);
-
     public TestBase()
     {
-      if (!providerSet)
+      if (!_providerSet)
       {
         // uncomment if needed
         //NpgsqlLogManager.Provider = new ConsoleLoggingProvider(NpgsqlLogLevel.Debug);
         //NpgsqlLogManager.IsParameterLoggingEnabled = true;
-        providerSet = true;
+        _providerSet = true;
       }
 
       string appPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
       Configuration = new ConfigurationBuilder()
         .AddJsonFile(Path.Combine(appPath, "appsettings.json"))
+        .AddJsonFile(Path.Combine(appPath, "appsettings.development.json"), optional: true)
         .AddEnvironmentVariables()
         .Build();
 
-      dbConnectionString = Configuration["BlacklistManagerConnectionStrings:DBConnectionString"];      
+      _dbConnectionString = Configuration["BlacklistManagerConnectionStrings:DBConnectionString"];
     }
 
     public async Task InitializeAsync(bool addPK = true, bool mockedServices = false, bool addValidDelegatedKey = false)
     {
-      SyncTest.WaitOne(); // tests must not run in parallel since each test first deletes database
-
-
       //setup server
-      server = await BlacklistManagerServer.CreateServerAsync(mockedServices);
-      client = server.CreateClient();
-      client.DefaultRequestHeaders.Add(ApiKeyAuthenticationHandler.ApiKeyHeaderName, Configuration["AppSettings:REST_APIKey"]);
+      Server = await BlacklistManagerServer.CreateServerAsync(mockedServices);
+      Client = Server.CreateClient();
+      Client.DefaultRequestHeaders.Add(Consts.ApiKeyHeaderName, Configuration["AppSettings:REST_APIKey"]);
 
-      loggerTest = server.Services.GetRequiredService<ILoggerFactory>().CreateLogger(LOG_CATEGORY);
-      loggerTest.LogInformation($"DbConnectionString: {dbConnectionString}");
+      LoggerFactory = Server.Services.GetRequiredService<ILoggerFactory>();
+      LoggerTest = LoggerFactory.CreateLogger(LOG_CATEGORY);
+      LoggerTest.LogInformation($"DbConnectionString: {_dbConnectionString}");
       // setup repositories
-      CourtOrderRepository = server.Services.GetRequiredService<ICourtOrderRepository>();
-      NodeRepository = server.Services.GetRequiredService<INodeRepository>();
-      TrustlistRepository = server.Services.GetRequiredService<ITrustListRepository>();
-      LegalEntityRepository = server.Services.GetRequiredService<ILegalEntityRepository>();
+      CourtOrderRepository = Server.Services.GetRequiredService<ICourtOrderRepository>();
+      NodeRepository = Server.Services.GetRequiredService<INodeRepository>();
+      TrustlistRepository = Server.Services.GetRequiredService<ITrustListRepository>();
+      LegalEntityRepository = Server.Services.GetRequiredService<ILegalEntityRepository>();
+      Nodes = Server.Services.GetRequiredService<INodes>();
 
-      // delete database before each test
-      CourtOrderRepositoryPostgres.EmptyRepository(dbConnectionString); //db owner must be used because sql statement "TRUNCATE .. RESTART IDENTITY CASCADE" needs it      
 
       if (addPK)
       {
         // add PK to trusted list
-        TrustlistRepository.CreatePublicKey(Utils.PublicKey, true, null);
+        await TrustlistRepository.CreatePublicKeyAsync(Utils.PublicKey, true, null);
+        await TrustlistRepository.CreatePublicKeyAsync(TEST_PUBLIC_KEY, true, null);
       }
 
 
       // setup common services
-      domainLogic = server.Services.GetRequiredService<IDomainAction>();
-      backgroundJobs = server.Services.GetRequiredService<IBackgroundJobs>() as BackgroundJobsMock;
-      bitcoindFactory = server.Services.GetRequiredService<IBitcoindFactory>() as BitcoindFactoryMock;
-      legalEntityFactory = server.Services.GetRequiredService<ILegalEntityFactory>() as LegalEntityFactoryMock;
-      propagationEvents = server.Services.GetService<IPropagationEvents>() as PropagationEventsMock;
-
-      if (bitcoindFactory != null)
+      CourtOrders = Server.Services.GetRequiredService<ICourtOrders>();
+      Nodes = Server.Services.GetRequiredService<INodes>();
+      LegalEndpoints = Server.Services.GetRequiredService<ILegalEndpoints>();
+      if (mockedServices)
       {
-        bitcoindFactory.ClearCalls();
+        BackgroundJobs = Server.Services.GetRequiredService<IBackgroundJobs>() as BackgroundJobsMock;
+        BitcoindFactory = Server.Services.GetRequiredService<IBitcoinFactory>() as BitcoinFactoryMock;
+        LegalEntityFactory = Server.Services.GetRequiredService<ILegalEntityFactory>() as LegalEntityFactoryMock;
+        PropagationEvents = Server.Services.GetService<IPropagationEvents>() as PropagationEventsMock;
+      }
+
+      if (BitcoindFactory != null)
+      {
+        BitcoindFactory.ClearCalls();
+      }
+
+      // Let's stop all background jobs so they don't interfere with our tests
+      if (BackgroundJobs != null)
+      {
+        await BackgroundJobs.StopAllAsync();
+        await BackgroundJobs.SetOfflineModeAsync(true);
       }
 
       if (addValidDelegatedKey)
       {
         await InsertValidDelegatingKeyAsync();
       }
-
-      // wait for background jobs that start on app start
-      if (backgroundJobs != null)
-      {
-        await backgroundJobs.WaitAllAsync();
-      }
     }
 
-    public void Cleanup()
+    public async Task CleanupAsync()
     {
-      server?.Dispose();
-      SyncTest.Set();
+      // Let's stop all background jobs
+      if (BackgroundJobs != null)
+      {
+        await BackgroundJobs.StopAllAsync();
+      }
+
+      Server?.Dispose();
+      // delete database after each test
+      await CourtOrderRepositoryPostgres.EmptyRepositoryAsync(_dbConnectionString);
     }
 
     private async Task InsertValidDelegatingKeyAsync()
@@ -138,10 +160,10 @@ namespace BlacklistManager.Test.Functional
         DelegationRequired = true
       };
       // Import signer key (privateKey/delegatedKey)
-      var response = await client.PostAsync(uri, new StringContent(JsonConvert.SerializeObject(signerKey), Encoding.UTF8, MediaTypeNames.Application.Json));
+      var response = await Client.PostAsync(uri, new StringContent(JsonSerializer.Serialize(signerKey), Encoding.UTF8, MediaTypeNames.Application.Json));
 
       Assert.IsTrue(response.IsSuccessStatusCode);
-      var id = await response.Content.ReadAsStringAsync();
+      var signerKeyResponse = JsonSerializer.Deserialize<SignerKeyViewModelGet>(await response.Content.ReadAsStringAsync());
 
       var minerPrivateKey = new NBitcoin.Key();
       var minerKeyCreate = new MinerKeyViewModelCreate
@@ -150,15 +172,15 @@ namespace BlacklistManager.Test.Functional
       };
 
       // Import miner key (publicKey/delegatingKey)
-      string postUri = $"{uri}/{int.Parse(id)}/minerKey";
-      response = await client.PostAsync(postUri, new StringContent(JsonConvert.SerializeObject(minerKeyCreate), Encoding.UTF8, MediaTypeNames.Application.Json));
+      string postUri = $"{uri}/{signerKeyResponse.SignerId}/minerKey";
+      response = await Client.PostAsync(postUri, new StringContent(JsonSerializer.Serialize(minerKeyCreate), Encoding.UTF8, MediaTypeNames.Application.Json));
       Assert.IsTrue(response.IsSuccessStatusCode);
       var minerKeyResponse = await response.Content.ReadAsStringAsync();
-      var minerKey = JsonConvert.DeserializeObject<MinerKeyViewModelGet>(minerKeyResponse);
+      var minerKey = JsonSerializer.Deserialize<MinerKeyViewModelGet>(minerKeyResponse);
 
       // Sign the payload
       var envelopeString = SignatureTools.CreateJSONWithBitcoinSignature(minerKey.DataToSign, minerPrivateKey.GetBitcoinSecret(BitcoinNetwork).ToWif(), BitcoinNetwork);
-      var bitcoinSignatureEnvelope = System.Text.Json.JsonSerializer.Deserialize<JsonEnvelope>(envelopeString, SerializerOptions.SerializeOptions);
+      var bitcoinSignatureEnvelope = JsonEnvelope.ToObject(envelopeString);
 
       var minerKeyUpdate = new MinerKeyViewModelUpdate
       {
@@ -168,9 +190,46 @@ namespace BlacklistManager.Test.Functional
       };
 
       // Post signature for delegatingKey
-      string putUri = $"{uri}/{int.Parse(id)}/minerKey";
-      response = await client.PutAsync(putUri, new StringContent(JsonConvert.SerializeObject(minerKeyUpdate), Encoding.UTF8, MediaTypeNames.Application.Json));
+      string putUri = $"{uri}/{signerKeyResponse.SignerId}/minerKey";
+      response = await Client.PutAsync(putUri, new StringContent(JsonSerializer.Serialize(minerKeyUpdate), Encoding.UTF8, MediaTypeNames.Application.Json));
       Assert.IsTrue(response.IsSuccessStatusCode);
+    }
+
+    public string SignWithTestKey(object obj2Sign)
+    {
+      var payload = JsonSerializer.Serialize(obj2Sign, SerializerOptions.SerializeOptionsNoPrettyPrint);
+      return SignWithTestKey(payload);
+    }
+    public string SignWithTestKey(string payload)
+    {
+      return SignatureTools.CreateJSONWithBitcoinSignature(payload, TEST_PRIVATE_KEY_WIF, Network.GetNetwork(Configuration["AppSettings:BitcoinNetwork"]), true);
+    }
+
+
+    public string CreateConfiscationTx(CourtOrderViewModelCreate.Fund fund, string refCourtOrderhash, string destinationAddress, string destinationFeeAddress, long amount2Confiscate)
+    {
+      var address = BitcoinAddress.Create(destinationAddress, Network.RegTest);
+      var feeAddress = BitcoinAddress.Create(destinationFeeAddress, Network.RegTest);
+      long feeValue = fund.Value - amount2Confiscate;
+
+      var tx = Transaction.Create(Network.RegTest);
+      tx.Inputs.Add(new OutPoint { Hash = new uint256(fund.TxOut.TxId), N = (uint)fund.TxOut.Vout });
+      tx.Outputs.Add(new NBitcoin.TxOut(Money.Satoshis(amount2Confiscate), address));
+      tx.Outputs.Add(new NBitcoin.TxOut(Money.Satoshis(feeValue), feeAddress));
+
+      var script = new Script(OpcodeType.OP_FALSE);
+      script += OpcodeType.OP_RETURN;
+      // Add protocol id
+      script += Op.GetPushOp(Encoders.Hex.DecodeData(Common.Consts.ConfiscationProtocolId));
+      script += Op.GetPushOp(Encoders.Hex.DecodeData($"01{ refCourtOrderhash}"));
+      tx.Outputs.Add(new NBitcoin.TxOut(0L, script));
+
+      return tx.ToHex();
+    }
+
+    public async Task WaitBackgrounJobUntilCompletedAsync(string groupName, int cancellationTime = 5000)
+    {
+      Assert.IsTrue(await BackgroundJobs.BackgroundTasks.WaitUntilCompletedAsync(groupName, cancellationTime));
     }
   }
 }

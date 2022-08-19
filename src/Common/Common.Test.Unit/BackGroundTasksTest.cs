@@ -20,7 +20,12 @@ namespace Common.Test.Unit
       var hostBuilder = Host.CreateDefaultBuilder()
                 .ConfigureLogging(logging =>
                 {
-                  logging.AddConsole((options) => { options.IncludeScopes = true; options.TimestampFormat = "HH:mm:ss:fff "; });
+                  logging.AddSimpleConsole((options) => 
+                  { 
+                    options.IncludeScopes = true; 
+                    options.TimestampFormat = "HH:mm:ss:fff ";
+                    options.ColorBehavior = Microsoft.Extensions.Logging.Console.LoggerColorBehavior.Enabled;
+                  });
                 });
 
       var serviceProvider = hostBuilder.Build().Services;
@@ -126,7 +131,7 @@ namespace Common.Test.Unit
       );
 
       WaitUntil(() => task2Started);
-      Assert.IsFalse(task1Finished); // task1 was cancelled
+      Assert.IsFalse(task1Finished); // task1 was canceled
 
       WaitUntil(() => taskGroup2Finished); // But task from group 2 run to the end
 
@@ -166,13 +171,13 @@ namespace Common.Test.Unit
       WaitUntil(() => taskGroup2Started);
 
 
-      CollectionAssert.AreEquivalent(new [] {"group1", "group2" }, bt.GetRunningGroups());
+      CollectionAssert.AreEquivalent(new [] {"group1", "group2" }, bt.GetRunningTasks());
       WaitUntil(() => task1Finished);
 
-      CollectionAssert.AreEquivalent(new[] { "group2" }, bt.GetRunningGroups());
+      CollectionAssert.AreEquivalent(new[] { "group2" }, bt.GetRunningTasks());
 
       await bt.StopAllAsync();
-      Assert.AreEqual(0, bt.GetRunningGroups().Length);
+      Assert.AreEqual(0, bt.GetRunningTasks().Length);
 
       Assert.IsTrue(task1Finished);
       Assert.IsFalse(taskGroup2Finished);
@@ -201,7 +206,7 @@ namespace Common.Test.Unit
       WaitUntil(() => task1Started);
 
       // Wait until task stops executing
-      WaitUntil(() => !bt.GetRunningGroups().Any());
+      WaitUntil(() => !bt.GetRunningTasks().Any());
       
       Assert.IsTrue(true); // Ok, we are still alive - the process did not crash
       // The process would crash if the delagte would return void instead of Task, since in that scenario,

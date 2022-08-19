@@ -14,65 +14,51 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Threading;
 using BlacklistManager.Domain.Models;
 using BlacklistManager.API.Rest.ViewModels;
-using BlacklistManager.Test.Functional.ViewModels;
 using Common.SmartEnums;
 
 namespace BlacklistManager.Test.Functional
 {
   public static class Utils
   {
-    public const string PrivateKey = "cVwyYsavaTKRrDHkqKmnHxHxGbWWCMxQhBiSA97SwBcT8f17zo1G";
-    public const string PublicKey = "0340d9c71c2ad42765bdef30f0d072d20c3362e9e3bd8676798a9c6677c1d799e6";
+    public const string PrivateKey = "cNpxQaWe36eHdfU3fo2jHVkWXVt5CakPDrZSYguoZiRHSz9rq8nF";
+    public const string PublicKey = "027ae06a5b3fe1de495fa9d4e738e48810b8b06fa6c959a5305426f78f42b48f8c";
+    public const string TestAddress = "msRNSw5hHA1W1jXXadxMDMQCErX1X8whTk";
 
-    public static async Task<string> SubmitFreezeOrderAsync(HttpClient client, params (string TxId, long vOut)[] txOuts)
+    public static async Task<string> SubmitFreezeOrderAsync(HttpClient client, params (long Value, string TxId, long vOut)[] txOuts)
     {
-      return await SubmitFreezeOrderAsync(client, "somecourtorderid", txOuts);
+      return await SubmitOrderAsync(client, DocumentType.FreezeOrder, "somecourtorderid", null, null, txOuts);
     }
 
-    public static async Task<string> SubmitFreezeOrderAsync(HttpClient client, string courtOrderId, params (string TxId, long vOut)[] txOuts)
+    public static async Task<string> SubmitFreezeOrderAsync(HttpClient client, string courtOrderId, params (long Value, string TxId, long vOut)[] txOuts)
+    {
+      return await SubmitOrderAsync(client, DocumentType.FreezeOrder, courtOrderId, null, null, txOuts);
+    }
+
+    public static async Task<string> SubmitOrderAsync(HttpClient client, DocumentType docType, string courtOrderId, string freezeCOId, string freezeCOHash, params (long Value, string TxId, long vOut)[] txOuts)
     {
       var reqContent = Utils.CreateProcessCourtOrderRequestContent(
-        DocumentType.FreezeOrder,
+        docType,
         courtOrderId,
         null,
         null,
-        null,
-        null,
-        new List<BMAPI.TxOut>(
-          txOuts.Select(x => new BMAPI.TxOut(x.TxId, x.vOut))),
+        freezeCOId,
+        freezeCOHash,
+        new List<(long, BMAPI.TxOut)>(
+          txOuts.Select(x => (x.Value, new BMAPI.TxOut(x.TxId, x.vOut)))),
         out string courtOrderHash);
 
       var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
-      Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
       return courtOrderHash;
     }
 
-    public static async Task<string> SubmitUnfreezeOrderAsync(HttpClient client, string freezeCourtOrderHash, params (string TxId, long vOut)[] txOuts)
+    public static async Task<string> SubmitUnfreezeOrderAsync(HttpClient client, string freezeCourtOrderHash, params (long Value, string TxId, long vOut)[] txOuts)
     {
-      return await SubmitUnfreezeOrderAsync(client, "somecourtorderid", freezeCourtOrderHash, txOuts);
-    }
-
-    public static async Task<string> SubmitUnfreezeOrderAsync(HttpClient client, string freezeCourtOrderId, string freezeCourtOrderHash, params (string TxId, long vOut)[] txOuts)
-    {
-      var reqContent = Utils.CreateProcessCourtOrderRequestContent(
-        DocumentType.UnfreezeOrder,
-        "somecourtorderid",
-        null,
-        null,
-        freezeCourtOrderId,
-        freezeCourtOrderHash,
-        new List<BMAPI.TxOut>(
-          txOuts.Select(x => new BMAPI.TxOut(x.TxId, x.vOut))),
-        out string courtOrderHash);
-
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
-      Assert.AreEqual(HttpStatusCode.Created, response.StatusCode);
-      return courtOrderHash;
+      return await SubmitOrderAsync(client, DocumentType.UnfreezeOrder, "somecourtorderid", "somecourtorderid", freezeCourtOrderHash, txOuts);
     }
 
     public static StringContent CreateProcessCourtOrderRequestContent(
       DocumentType documentType,
-      IEnumerable<BMAPI.TxOut> funds,
+      IEnumerable<(long Value, BMAPI.TxOut TxOut)> funds,
       out string orderHash)
     {
       return CreateProcessCourtOrderRequestContent(documentType, "somecourtorderid", null, null, null, null, funds, out orderHash);
@@ -80,7 +66,7 @@ namespace BlacklistManager.Test.Functional
 
     public static StringContent CreateProcessCourtOrderRequestContent(
       DocumentType documentType,
-      IEnumerable<BMAPI.TxOut> funds,
+      IEnumerable<(long, BMAPI.TxOut)> funds,
       DateTime? validFrom,
       DateTime? validTo,
       out string orderHash)
@@ -95,7 +81,7 @@ namespace BlacklistManager.Test.Functional
       DateTime? validTo,
       string freezeCourtOrderId,
       string freezeCourtOrderHash,
-      IEnumerable<BMAPI.TxOut> funds,
+      IEnumerable<(long Value, BMAPI.TxOut TxOut)> funds,
       out string orderHash)
     {
       var courtOrder = new CourtOrderViewModelCreate
@@ -106,14 +92,15 @@ namespace BlacklistManager.Test.Functional
         CourtOrderId = courtOrderId,
         FreezeCourtOrderId = freezeCourtOrderId,
         FreezeCourtOrderHash = freezeCourtOrderHash,
-        Funds = new List<CourtOrderViewModelCreate.Fund>()
+        Funds = new List<CourtOrderViewModelCreate.Fund>(),
+        Blockchain = $"BSV-{NBitcoin.Network.RegTest.Name}"
       };
       foreach (var fund in funds)
       {
-        courtOrder.Funds.Add(new CourtOrderViewModelCreate.Fund() { TxOut = fund });
+        courtOrder.Funds.Add(new CourtOrderViewModelCreate.Fund() { TxOut = fund.TxOut, Value = fund.Value });
       }
 
-      string payload = JsonSerializer.Serialize(courtOrder, Common.SerializerOptions.SerializeOptions);
+      string payload = JsonSerializer.Serialize(courtOrder, Common.SerializerOptions.SerializeOptionsNoPrettyPrint);
       string signed = Common.SignatureTools.CreateJSONWithBitcoinSignature(payload, PrivateKey, NBitcoin.Network.RegTest, true);
 
       orderHash = Common.SignatureTools.GetSigDoubleHash(payload, "UTF-8");
@@ -141,32 +128,32 @@ namespace BlacklistManager.Test.Functional
       throw new Exception("Timeout - WaitUntil did not complete in allocated time");
     }
 
-    public static async Task<CourtOrderQuery> QueryCourtOrderAsync(HttpClient client, string courtOrder, bool includeFunds)
+    public static async Task<CourtOrderQueryViewModel> QueryCourtOrderAsync(HttpClient client, string courtOrder, bool includeFunds)
     {
       var response = await client.GetAsync(BlacklistManagerServer.Get.GetCourtOrder(courtOrder, includeFunds));
       Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
       var json = await response.Content.ReadAsStringAsync();
-      var c = JsonSerializer.Deserialize<CourtOrderQuery>(json);
+      var c = JsonSerializer.Deserialize<CourtOrderQueryViewModel>(json);
       Assert.IsNotNull(c);
       return c;
     }
 
-    public static async Task<IEnumerable<CourtOrderQuery>> QueryCourtOrdersAsync(HttpClient client, bool includeFunds)
+    public static async Task<IEnumerable<CourtOrderQueryViewModel>> QueryCourtOrdersAsync(HttpClient client, bool includeFunds)
     {
       var response = await client.GetAsync(BlacklistManagerServer.Get.GetCourtOrder(null, includeFunds));
       Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
       var json = await response.Content.ReadAsStringAsync();
-      var c = JsonSerializer.Deserialize<CourtOrderQuery[]>(json);
+      var c = JsonSerializer.Deserialize<CourtOrderQueryViewModel[]>(json);
       Assert.IsNotNull(c);
       return c;
     }
 
-    public static async Task<CourtOrderQuery.Fund> QueryFundAsync(HttpClient client, string txId, long vOut)
+    public static async Task<FundViewModel> QueryFundAsync(HttpClient client, string txId, long vOut)
     {
       var response = await client.GetAsync(BlacklistManagerServer.Get.GetTxOut(txId, vOut));
       Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
       var txOutJson = await response.Content.ReadAsStringAsync();
-      var txOut = JsonSerializer.Deserialize<CourtOrderQuery.Fund>(txOutJson);
+      var txOut = JsonSerializer.Deserialize<FundViewModel>(txOutJson);
       Assert.IsNotNull(txOut);
       return txOut;
     }
@@ -214,7 +201,7 @@ namespace BlacklistManager.Test.Functional
       );
     }
 
-    public static void AreEqual(string expected, CourtOrderQuery.Fund fund)
+    public static void AreEqual(string expected, FundViewModel fund)
     {
       var eah = string.Join(";",
         fund.EnforceAtHeight

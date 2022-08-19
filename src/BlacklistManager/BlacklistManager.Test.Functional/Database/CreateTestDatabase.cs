@@ -10,17 +10,23 @@ namespace BlacklistManager.Test.Functional.Database
 {
   public class CreateTestDatabase : ICreateDB
   {
-    readonly CreateDB blacklistManagerTestDB;
+    readonly CreateDB _BMTestDB;
 
     public CreateTestDatabase(ILogger<CreateDB> logger, IConfiguration configuration)
     {
       System.Console.WriteLine(Directory.GetCurrentDirectory());
-      blacklistManagerTestDB = new CreateDB(logger, "BlacklistManager", RDBMS.Postgres, configuration["BlacklistManagerConnectionStrings:DBConnectionString"], configuration["BlacklistManagerConnectionStrings:DBConnectionStringMaster"], "..\\..\\..\\Database\\Scripts");
+      _BMTestDB = new CreateDB(
+        logger, 
+        "BlacklistManager", 
+        RDBMS.Postgres, 
+        configuration["BlacklistManagerConnectionStrings:DBConnectionString"], 
+        configuration["BlacklistManagerConnectionStrings:DBConnectionStringMaster"], 
+        "..\\..\\..\\Database\\Scripts");
     }
 
     public bool DoCreateTestDatabase(out string errorMessage, out string errorMessageShort)
     {
-      return blacklistManagerTestDB.CreateDatabase(out errorMessage, out errorMessageShort);
+      return _BMTestDB.CreateDatabase(out errorMessage, out errorMessageShort);
     }
   }
 }

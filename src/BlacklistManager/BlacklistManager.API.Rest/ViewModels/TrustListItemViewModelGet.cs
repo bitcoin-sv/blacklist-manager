@@ -18,6 +18,7 @@ namespace BlacklistManager.API.Rest.ViewModels
       Remarks = domain.Remarks;
       CreatedAt = domain.CreatedAt;
       UpdatedAt = domain.UpdateAt;
+      ReplacedBy = domain.ReplacedBy;
     }
 
     [JsonPropertyName("id")]
@@ -25,14 +26,17 @@ namespace BlacklistManager.API.Rest.ViewModels
 
     [JsonPropertyName("trusted")]
     public bool? Trusted { get; set; }
-    
+
     [JsonPropertyName("remarks")]
     public string Remarks { get; set; }
 
-    [JsonPropertyName("createdAt")] 
+    [JsonPropertyName("createdAt")]
     public DateTime? CreatedAt { get; set; }
-    
+
     [JsonPropertyName("updatedAt")]
     public DateTime? UpdatedAt { get; set; }
+
+    [JsonPropertyName("replacedBy")]
+    public string ReplacedBy { get; set; }
   }
 }

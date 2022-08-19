@@ -1,6 +1,7 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using BlacklistManager.Domain.Models;
 
 namespace BlacklistManager.Domain.Repositories
@@ -12,24 +13,24 @@ namespace BlacklistManager.Domain.Repositories
     /// <summary>
     /// Returns null if node already exists
     /// </summary>
-    Node CreateNode(Node node);
+    Task<Node> CreateNodeAsync(Node node);
 
     
     /// <summary>
     /// Returns false if not found, Can not be used to update nodeStatus
     /// </summary>
-    bool UpdateNode(Node node);
+    Task<bool> UpdateNodeAsync(Node node);
     
     /// <summary>
     /// Updates lastError and lastErrorAt fields
     /// </summary>
     /// <returns>false if not updated</returns>
-    bool UpdateNodeError(Node node);
+    Task<bool> UpdateNodeErrorAsync(Node node);
 
-    Node GetNode(string hostAndPort);
+    Task<Node> GetNodeAsync(string hostAndPort);
 
-    int DeleteNode(string hostAndPort);
+    Task<int> DeleteNodeAsync(string hostAndPort);
 
-    public IEnumerable<Node> GetNodes(); 
+    Task<IEnumerable<Node>> GetNodesAsync(); 
   }
 }

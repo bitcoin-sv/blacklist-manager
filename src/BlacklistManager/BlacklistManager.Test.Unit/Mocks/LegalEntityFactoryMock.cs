@@ -17,7 +17,7 @@ namespace BlacklistManager.Test.Unit.Mocks
 
     public string BaseURL { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
 
-    public ILegalEntity Create(string baseUrl, string apiKey)
+    public ILegalEntity Create(string baseUrl, string deltaLink, string apiKeyName, string apiKey, int? legalEntityClientId)
     {
       if (legalEntity == null)
       {

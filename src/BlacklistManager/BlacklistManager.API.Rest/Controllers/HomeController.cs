@@ -3,18 +3,18 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Net.Mime;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using BlacklistManager.API.Rest.ViewModels;
 using BlacklistManager.Domain;
 using BlacklistManager.Domain.Actions;
+using BlacklistManager.Domain.BackgroundJobs;
 using BlacklistManager.Domain.ExternalServices;
 using BlacklistManager.Domain.Models;
 using BlacklistManager.Domain.Repositories;
 using Common;
-using Common.BitcoinRpc;
+using Common.Bitcoin;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -29,92 +29,101 @@ namespace BlacklistManager.API.Rest.Controllers
   [ApiController]
   public class HomeController : ControllerBase
   {
-    readonly INodes nodes;
-    readonly ILegalEndpoints legalEndpoints;
-    readonly IDelegatedKeys delegatedKeys;
-    readonly ITrustListRepository trustListRepository;
-    readonly IBitcoindFactory bitcoindFactory;
-    readonly ILegalEntityFactory legalEntityFactory;
-    readonly AppSettings appSettings;
+    readonly INodes _nodes;
+    readonly ILegalEndpoints _legalEndpoints;
+    readonly IDelegatedKeys _delegatedKeys;
+    readonly ITrustListRepository _trustListRepository;
+    readonly IBitcoinFactory _bitcoindFactory;
+    readonly ILegalEntityFactory _legalEntityFactory;
+    readonly ICourtOrderRepository _courtOrderRepository;
+    readonly IBackgroundJobs _backgroundJobs;
+    readonly AppSettings _appSettings;
 
     public HomeController(ILegalEndpoints legalEndpoints,
                           INodes nodes,
                           IDelegatedKeys delegatedKeys,
                           ITrustListRepository trustListRepository,
-                          IBitcoindFactory bitcoindFactory,
+                          IBitcoinFactory bitcoindFactory,
                           IOptions<AppSettings> options,
-                          ILegalEntityFactory legalEntityFactory)
+                          ILegalEntityFactory legalEntityFactory,
+                          ICourtOrderRepository courtOrderRepository,
+                          IBackgroundJobs backgroundJobs)
     {
-      this.nodes = nodes;
-      this.legalEndpoints = legalEndpoints;
-      this.delegatedKeys = delegatedKeys;
-      this.trustListRepository = trustListRepository;
-      this.bitcoindFactory = bitcoindFactory;
-      this.legalEntityFactory = legalEntityFactory;
-      this.appSettings = options.Value;
+      _nodes = nodes;
+      _legalEndpoints = legalEndpoints;
+      _delegatedKeys = delegatedKeys;
+      _trustListRepository = trustListRepository;
+      _bitcoindFactory = bitcoindFactory;
+      _legalEntityFactory = legalEntityFactory;
+      _courtOrderRepository = courtOrderRepository;
+      _backgroundJobs = backgroundJobs;
+      _appSettings = options.Value;
     }
 
     [HttpGet("status")]
-    public async Task<ActionResult> GetAppStatusAsync()
+    public async Task<ActionResult<StatusViewModel>> GetAppStatusAsync()
     {
+      var result = new StatusViewModel();
+      result.OfflineModeInitiated = _backgroundJobs.OfflineMode;
+
       #region Bitcoind checks
-      List<CheckMessageViewModel> checkMessages = new List<CheckMessageViewModel>();
-      var allNodes = nodes.GetNodes();
+      var allNodes = await _nodes.GetNodesAsync();
       if (allNodes.Any())
       {
         foreach (var node in allNodes)
         {
-          var bitcoind = bitcoindFactory.Create(node.Host, node.Port, node.Username, node.Password);
-          string blockHash = null;
+          var bitcoind = _bitcoindFactory.Create(node.Host, node.Port, node.Username, node.Password);
           try
           {
-            blockHash = await bitcoind.GetBestBlockHashAsync();
+            _ = await bitcoind.GetBestBlockHashAsync();
           }
-          catch (RpcException ex)
+          catch (Exception ex)
           {
-            checkMessages.Add(CheckMessageViewModel.SetBitcoindError($"{node.Host}:{node.Port}", ex.GetBaseException().Message));
+            result.AddCheckMessage(CheckMessageViewModel.SetBitcoindError($"{node.Host}:{node.Port}", ex.GetBaseException().Message));
           }
         }
       }
       else
       {
-        checkMessages.Add(CheckMessageViewModel.SetBMError(null, "Database does not contain information about nodes."));
+        result.AddCheckMessage(CheckMessageViewModel.SetBMError(null, "Database does not contain information about nodes."));
       }
       #endregion
 
+      #region Delegating key checks
       ActiveDelegatingKey activeKey = null;
       try
       {
-        activeKey = await delegatedKeys.GetActiveKeyForSigningAsync();
+        activeKey = await _delegatedKeys.GetActiveKeyForSigningAsync();
         if (activeKey == null)
         {
-          checkMessages.Add(CheckMessageViewModel.SetBMError(null, "There are no active keys present for signing documents."));
+          result.AddCheckMessage(CheckMessageViewModel.SetBMError(null, "There are no active keys present for signing documents."));
         }
       }
       catch (Exception)
       {
-        checkMessages.Add(CheckMessageViewModel.SetBMError(null, "Error while checking for active keys."));
+        result.AddCheckMessage(CheckMessageViewModel.SetBMError(null, "Error while checking for active keys."));
       }
+      #endregion
 
       #region LegalEntityEndpoints checks
-      var allLegalEndpoints = await legalEndpoints.GetLegalEntitiyEndpointsAsync();
+      var allLegalEndpoints = await _legalEndpoints.GetAsync();
       if (allLegalEndpoints.Any())
       {
         foreach (var legalEntity in allLegalEndpoints)
         {
-          var endpoint = legalEntityFactory.Create(legalEntity.BaseUrl, legalEntity.APIKey);
+          var endpoint = _legalEntityFactory.Create(legalEntity.BaseUrl, null, Common.Consts.ApiKeyHeaderName, legalEntity.APIKey, legalEntity.LegalEntityEndpointId);
           try
           {
             var publicKey = await endpoint.GetPublicKeyAsync();
 
-            if (!trustListRepository.IsPublicKeyTrusted(publicKey))
+            if (!await _trustListRepository.IsPublicKeyTrustedAsync(publicKey))
             {
-              checkMessages.Add(CheckMessageViewModel.SetBMError(null, $"Public key '{publicKey}' used to sign the test payload is not trusted."));
+              result.AddCheckMessage(CheckMessageViewModel.SetBMError(null, $"Public key '{publicKey}' used to sign the test payload is not trusted."));
             }
           }
           catch (Exception ex)
           {
-            checkMessages.Add(CheckMessageViewModel.SetAlertManagerError(legalEntity.BaseUrl, ex.GetBaseException().Message));
+            result.AddCheckMessage(CheckMessageViewModel.SetAlertManagerError(legalEntity.BaseUrl, ex.GetBaseException().Message));
           }
 
           if (activeKey != null)
@@ -125,8 +134,8 @@ namespace BlacklistManager.API.Rest.Controllers
               {
                 DelegatedKeys = activeKey.SignedDelegatedKeyJSON
               };
-              var checkMinedBlocksJSON = JsonSerializer.Serialize(checkMinedBlocks, SerializerOptions.SerializeOptions);
-              var wifKey = Encryption.Decrypt(activeKey.DelegatedPrivateKey, appSettings.EncryptionKey);
+              var checkMinedBlocksJSON = JsonSerializer.Serialize(checkMinedBlocks, SerializerOptions.SerializeOptionsNoPrettyPrint);
+              var wifKey = EncryptionTools.Decrypt(activeKey.DelegatedPrivateKey, _appSettings.EncryptionKey);
               var response = await endpoint.CheckMinedBlocksAsync(SignatureTools.CreateJSonSignature(checkMinedBlocksJSON, wifKey));
               var blocks = JsonSerializer.Deserialize<CheckMinedBlocksResponseViewModel>(response, SerializerOptions.SerializeOptions);
 
@@ -144,33 +153,63 @@ namespace BlacklistManager.API.Rest.Controllers
 
                 if (keyResponse.NumberOfMinedBlocks == 0)
                 {
-                  checkMessages.Add(CheckMessageViewModel.SetAlertManagerWarning(legalEntity.BaseUrl, $"No blocks have been mined with {pkString}."));
+                  result.AddCheckMessage(CheckMessageViewModel.SetAlertManagerWarning(legalEntity.BaseUrl, $"No blocks have been mined with {pkString}."));
                 }
                 else
                 {
-                  checkMessages.Add(CheckMessageViewModel.SetAlertManagerInfo(legalEntity.BaseUrl, $"{keyResponse.NumberOfMinedBlocks} blocks of last {keyResponse.NumberOfBlocksToCheck} have been mined with {pkString}."));
+                  result.AddCheckMessage(CheckMessageViewModel.SetAlertManagerInfo(legalEntity.BaseUrl, $"{keyResponse.NumberOfMinedBlocks} blocks of last {keyResponse.NumberOfBlocksToCheck} have been mined with {pkString}."));
                 }
               }
+
+              var pendingConsensusActivations = (await _courtOrderRepository.GetPendingConsensusActivationsAsync(_appSettings.MaxRetryCount, _appSettings.ConsensusWaitDays)).Count();
+              if (pendingConsensusActivations > 0)
+              {
+                result.AddCheckMessage(CheckMessageViewModel.SetAlertManagerInfo(legalEntity.BaseUrl, $"{pendingConsensusActivations} pending consensus activations."));
+              }
+
+              var strBuilder = new List<string>();
+              strBuilder.Add($"{legalEntity.ProcessedOrdersCount} court orders successfully processed. Last successful contact at {legalEntity.LastContactedAt}");
+              if (legalEntity.FailureCount > 0)
+              {
+                strBuilder.Add($"{legalEntity.FailureCount} failures occurred.");
+                strBuilder.Add($"Last error at '{legalEntity.LastErrorAt}'. ErroMessage: '{legalEntity.LastError}'");
+              }
+              result.AddCheckMessage(CheckMessageViewModel.SetAlertManagerInfo(legalEntity.BaseUrl, strBuilder.ToArray()));
+
             }
             catch (Exception ex)
             {
-              checkMessages.Add(CheckMessageViewModel.SetAlertManagerError(legalEntity.BaseUrl, ex.GetBaseException().Message));
+              result.AddCheckMessage(CheckMessageViewModel.SetAlertManagerError(legalEntity.BaseUrl, ex.GetBaseException().Message));
             }
           }
         }
       }
       else
       {
-        checkMessages.Add(CheckMessageViewModel.SetBMError(null,  "Database does not contain information about legal entity endpoints."));
+        result.AddCheckMessage(CheckMessageViewModel.SetBMError(null, "Database does not contain information about legal entity endpoints."));
       }
       #endregion
 
-      var statusResult = new StatusViewModel
+      #region BackgroundJob status
+
+      result.BackgroundJobStatuses = _backgroundJobs.BackgroundTasks.Tasks.Select(x => new BackgroundJobStatusViewModel
       {
-        CheckMessages = checkMessages.ToArray(),
-        AppSettings = appSettings
-      };
-      return Content(HelperTools.JSONSerializeNewtonsoft(statusResult, true), MediaTypeNames.Application.Json, Encoding.UTF8);
+        Name = x.Key,
+        Status = x.Value.Status.ToString()
+      }).ToArray();
+
+      #endregion
+
+      result.AppSettings = _appSettings;
+      return Ok(result);
+    }
+
+    [HttpPost("offline")]
+    [Authorize]
+    public async Task<IActionResult> SetOfflineModeAsync(bool offlineMode)
+    {
+      await _backgroundJobs.SetOfflineModeAsync(offlineMode);
+      return Ok();
     }
   }
 }

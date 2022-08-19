@@ -20,8 +20,6 @@ namespace BlacklistManager.Cli
 
   public class BlacklistManagerCli
   {
-
-    const string ApiKeyHeaderName = "X-Api-Key"; // Keep this in sync with Blacklistmanager.REST
     readonly RootCommand rootCommand;
     // Used to share state between InvokeCommand and DoTheWork
     HttpMessageHandler messageHandler;
@@ -162,7 +160,7 @@ namespace BlacklistManager.Cli
     }
 
     // Helper method. System.CommandLine defines overloads just up to T7
-    static ICommandHandler CommandHandlerCreate<T1, T2, T3, T4, T5, T6, T7,T8>(
+    static ICommandHandler CommandHandlerCreate<T1, T2, T3, T4, T5, T6, T7, T8>(
       Func<T1, T2, T3, T4, T5, T6, T7, T8, int> action) =>
       HandlerDescriptor.FromDelegate(action).GetCommandHandler();
 
@@ -172,23 +170,21 @@ namespace BlacklistManager.Cli
     /// <returns></returns>
     public static Uri GetUrl(string hostAndPort, string resourceType)
     {
-      var ub = new UriBuilder();
+      var ub = new UriBuilder
+      {
+        Scheme = "http" // use http by default
+      };
 
       var hostAndPortLower = hostAndPort.ToLower();
 
       if (hostAndPortLower.StartsWith("http://"))
       {
         hostAndPortLower = hostAndPortLower.Substring("http://".Length);
-        ub.Scheme = "http";
       }
       else if (hostAndPortLower.StartsWith("https://"))
       {
         ub.Scheme = "https";
         hostAndPortLower = hostAndPortLower.Substring("https://".Length);
-      }
-      else
-      {
-        ub.Scheme = "http"; // use http by default
       }
 
       if (!hostAndPortLower.Contains(":"))
@@ -213,8 +209,12 @@ namespace BlacklistManager.Cli
         ub.Query = split[1];
       }
 
-      ub.Path = $"/api/v1/{resourceType}";
-
+      string path = $"/api/v1/{resourceType}";
+      ub.Path = path;
+      if (ub.Uri.AbsolutePath != path)
+      {
+        throw new ArgumentException($"Invalid syntax for resource {resourceType}");
+      }
       return ub.Uri;
     }
 
@@ -303,7 +303,7 @@ namespace BlacklistManager.Cli
         HttpContent content = null;
         using var client = new HttpClient(messageHandler ?? new HttpClientHandler()); // use messageHandler that was set in InvokeCommand
 
-        client.DefaultRequestHeaders.Add(ApiKeyHeaderName, apiKey);
+        client.DefaultRequestHeaders.Add(Common.Consts.ApiKeyHeaderName, apiKey);
 
         HttpResponseMessage response;
         try

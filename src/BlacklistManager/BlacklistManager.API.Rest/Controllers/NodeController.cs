@@ -7,6 +7,7 @@ using System.Net;
 using System.Threading.Tasks;
 using BlacklistManager.API.Rest.ViewModels;
 using BlacklistManager.Domain.Actions;
+using Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
@@ -18,25 +19,21 @@ namespace BlacklistManager.API.Rest.Controllers
   [Authorize]
   public class NodeController : ControllerBase
   {
-
-    private readonly ILogger<BlackListManagerLogger> logger;
-    private readonly IDomainAction domainAction;
-
+    private readonly INodes _nodes;
 
     public NodeController(
       ILogger<BlackListManagerLogger> logger,
-      IDomainAction domainAction
+      INodes nodes
       )
     {
-      this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
-      this.domainAction = domainAction ?? throw new ArgumentNullException(nameof(domainAction));
+      this._nodes = nodes ?? throw new ArgumentNullException(nameof(nodes));
 
     }
 
     [HttpPost]
     public async Task<ActionResult<NodeViewModelGet>> PostAsync(NodeViewModelCreate data) 
     {
-      var created = await domainAction.CreateNodeAsync(data.ToDomainObject());
+      var created = await _nodes.CreateNodeAsync(data.ToDomainObject());
       if (created == null)
       {
         var problemDetail = ProblemDetailsFactory.CreateProblemDetails(HttpContext, (int)HttpStatusCode.BadRequest);
@@ -45,7 +42,7 @@ namespace BlacklistManager.API.Rest.Controllers
         return Conflict(problemDetail);
       }
 
-      return CreatedAtAction(nameof(Get), 
+      return CreatedAtAction(Consts.HttpMethodNameGET, 
         new { id = created.ToExternalId() },
         new NodeViewModelGet(created));
     }
@@ -60,7 +57,7 @@ namespace BlacklistManager.API.Rest.Controllers
         return BadRequest(problemDetail);
       }
 
-      if (! await domainAction.UpdateNodeAsync(data.ToDomainObject()))
+      if (! await _nodes.UpdateNodeAsync(data.ToDomainObject()))
       {
         return NotFound();
       }
@@ -69,17 +66,17 @@ namespace BlacklistManager.API.Rest.Controllers
     }
 
     [HttpDelete("{id}")]
-    public IActionResult DeleteNode(string id)
+    public async Task<IActionResult> DeleteNodeAsync(string id)
     {
-      domainAction.DeleteNode(id);
+      await _nodes.DeleteNodeAsync(id);
       return NoContent();
     }
 
 
     [HttpGet("{id}")]
-    public ActionResult<NodeViewModelGet> Get(string id)
+    public async Task<ActionResult<NodeViewModelGet>> GetAsync(string id)
     {
-      var result = domainAction.GetNode(id);
+      var result = await _nodes.GetNodeAsync(id);
       if (result == null)
       {
         return NotFound();
@@ -89,9 +86,9 @@ namespace BlacklistManager.API.Rest.Controllers
     }
 
     [HttpGet]
-    public ActionResult<IEnumerable<NodeViewModelGet>> Get()
+    public async Task<ActionResult<IEnumerable<NodeViewModelGet>>> GetAsync()
     {
-      var result = domainAction.GetNodes();
+      var result = await _nodes.GetNodesAsync();
       return Ok(result.Select(x => new NodeViewModelGet(x)));
     }
   }

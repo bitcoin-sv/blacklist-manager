@@ -12,15 +12,11 @@ namespace Common.SmartEnums
 
     public PurposeType(int id, string name) : base(id, name) { }
 
-    public static implicit operator string(PurposeType purposeType) => purposeType.Name;
-
-    public static implicit operator int(PurposeType purposeType) => purposeType.Id;
-
     public static explicit operator PurposeType(int id)
     {
       var purposeType = GetAll<PurposeType>().SingleOrDefault(x => x.Id == id);
       if (purposeType == null)
-        throw new Exception($"Invalid purpose type id '{id}'");
+        throw new InvalidOperationException($"Invalid purpose type id '{id}'");
       return purposeType;
     }
 
@@ -28,7 +24,7 @@ namespace Common.SmartEnums
     {
       var purposeType = GetAll<PurposeType>().SingleOrDefault(x => x.Name == name);
       if (purposeType == null)
-        throw new Exception($"Invalid purpose type name '{name}'");
+        throw new InvalidOperationException($"Invalid purpose type name '{name}'");
       return purposeType;
     }
 

@@ -17,9 +17,9 @@ namespace BlacklistManager.Test.Functional
     }
 
     [TestCleanup]
-    public void TestCleanup()
+    public async Task TestCleanupAsync()
     {
-      base.Cleanup();
+      await base.CleanupAsync();
     }
 
     public override string GetBaseUrl() => BlacklistManagerServer.ApiConfigurationParamUrl;

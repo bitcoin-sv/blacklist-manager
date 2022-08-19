@@ -3,12 +3,13 @@
 using BlacklistManager.Domain;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Sodium;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
+using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -19,7 +20,6 @@ namespace BlacklistManager.Infrastructure.Authentication
   {
     private AppSettings appSettings;
     private const string ProblemDetailsContentType = "application/problem+json";
-    public const string ApiKeyHeaderName = "X-Api-Key"; // Keep this in sync with BlacklistManager.Cli
 
     public ApiKeyAuthenticationHandler(
         IOptionsMonitor<ApiKeyAuthenticationOptions> options,
@@ -35,14 +35,14 @@ namespace BlacklistManager.Infrastructure.Authentication
     {
       return await Task.Run(() =>
       {
-        if (!Request.Headers.TryGetValue(ApiKeyHeaderName, out var apiKeyHeaderValues))
+        if (!Request.Headers.TryGetValue(Common.Consts.ApiKeyHeaderName, out var apiKeyHeaderValues))
         {
           return AuthenticateResult.NoResult();
         }
 
         var providedApiKey = apiKeyHeaderValues.FirstOrDefault();
-
-        if (appSettings.REST_APIKey == providedApiKey)
+        
+        if (Utilities.Compare(Encoding.UTF8.GetBytes(appSettings.REST_APIKey), Encoding.UTF8.GetBytes(providedApiKey)))
         {
           var claims = new List<Claim>
              {

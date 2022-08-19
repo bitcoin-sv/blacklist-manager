@@ -43,5 +43,15 @@ namespace Common
     /// mimetype of the payload data
     /// </summary>
     public string Mimetype { get; set; }
+
+    public static JsonEnvelope ToObject(string json)
+    {
+      return HelperTools.JSONDeserializeNewtonsoft<JsonEnvelope>(json);
+    }
+
+    public string ToJson()
+    {
+      return HelperTools.JSONSerializeNewtonsoft(this);
+    }
   }
 }

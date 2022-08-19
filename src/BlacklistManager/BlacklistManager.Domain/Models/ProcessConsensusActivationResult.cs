@@ -1,37 +1,51 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
+using System.Collections.Generic;
+
 namespace BlacklistManager.Domain.Models
 {
   public class ProcessConsensusActivationResult
   {
-    private bool internalError = false;
-    private bool anyConsensusActivationsPending = false;
+    private bool _internalError = false;
+    private bool _anyConsensusActivationsPending = false;
+    private List<string> _activatedConsensusActivations = new();
 
     public ProcessConsensusActivationResult(bool internalError = false)
     {
-      this.internalError = internalError;
+      this._internalError = internalError;
     }
-
-    public void SetConsensusActivationsPending()
+    public void SetConsensusActivationsPending(bool increaseFailureCount = true)
     {
-      anyConsensusActivationsPending = true;
+      _anyConsensusActivationsPending = true;
+      if (increaseFailureCount)
+      {
+        Failed++;
+      }
     }
 
     public void SetInternalError()
     {
-      internalError = true;
+      _internalError = true;
     }
 
     public int Processed { get; set; }
+    public int Failed { get; private set; }
 
     /// <summary>
     /// If true then processing ended without errors
     /// </summary>
-    public bool WasSuccessful => !internalError;
+    public bool WasSuccessful => !_internalError;
 
     /// <summary>
     /// if true then not all consensus activations were processed
     /// </summary>
-    public bool AnyConsensusActivationsStillPending => anyConsensusActivationsPending;
+    public bool AnyConsensusActivationsStillPending => _anyConsensusActivationsPending;
+
+    public IEnumerable<string> ConsensusActivations => _activatedConsensusActivations;
+
+    public void AddActivated(string coHash)
+    {
+      _activatedConsensusActivations.Add(coHash);
+    }
   }
 }

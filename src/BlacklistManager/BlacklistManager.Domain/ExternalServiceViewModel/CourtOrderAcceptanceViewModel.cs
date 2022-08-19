@@ -17,5 +17,7 @@ namespace BlacklistManager.Domain.ExternalServiceViewModel
     public DateTime CreatedAt { get; set; }
 
     public string[] DelegatedKeys { get; set; }
+
+    public string[] Rejection { get; set; }
   }
 }

@@ -1,39 +1,41 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
 using System;
-using System.Threading;
+using System.Threading.Tasks;
 
 namespace Common
 {
   public static class RetryUtils
   {
-    public static void Exec(Action action, int retry = 6)
-    {      
-      int retryDelay = 100;
-      int initialRetry = retry;
-      do
+    public async static Task ExecuteWithRetriesAsync(int noOfRetries, string errorMessage, Func<Task> methodToExecute, int sleepTimeBetweenRetries = 1000)
+    {
+      try
       {
-        try
+        do
         {
-          retry--;
-          action();
-          return;
-
-        }
-        catch (Exception ex)
-        {
-          if (retry == 0)
+          noOfRetries--;
+          try
           {
-            throw new Exception($"Failed after {initialRetry} retries", ex);
+            await methodToExecute();
+            return;
+          }
+          catch
+          {
+            await Task.Delay(sleepTimeBetweenRetries);
+            if (noOfRetries == 0)
+            {
+              throw;
+            }
           }
         }
-
-        Thread.Sleep(retryDelay);
-        retryDelay *= 2;
-
-      } while (retry > 0);
-
-      throw new Exception("Exec with retry reached the end");
+        while (noOfRetries > 0);
+      }
+      catch (Exception ex)
+      {
+        if (!string.IsNullOrEmpty(errorMessage))
+          throw new Exception(errorMessage, ex);
+        throw;
+      }
     }
   }
 }

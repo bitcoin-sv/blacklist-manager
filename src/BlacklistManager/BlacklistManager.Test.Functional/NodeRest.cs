@@ -3,6 +3,7 @@
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Mime;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -23,9 +24,9 @@ namespace BlacklistManager.Test.Functional
     }
 
     [TestCleanup]
-    public void TestCleanup()
+    public async Task TestCleanupAsync()
     {
-      base.Cleanup();
+      await base.CleanupAsync();
     }
 
     public override string GetNonExistentKey() => "ThisKeyDoesNotExists:123"; 
@@ -98,10 +99,10 @@ namespace BlacklistManager.Test.Functional
         Password = "somePassword2",
         Username = "user2"
       };
-      var content = new StringContent(JsonSerializer.Serialize(create), Encoding.UTF8, "application/json");
+      var content = new StringContent(JsonSerializer.Serialize(create), Encoding.UTF8, MediaTypeNames.Application.Json);
 
       //act
-      var response = await client.PostAsync(UrlForKey(""), content);
+      var response = await Client.PostAsync(UrlForKey(""), content);
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert
@@ -123,10 +124,10 @@ namespace BlacklistManager.Test.Functional
         Password = "somePassword2",
         Username = "user2"
       };
-      var content = new StringContent(JsonSerializer.Serialize(create), Encoding.UTF8, "application/json");
+      var content = new StringContent(JsonSerializer.Serialize(create), Encoding.UTF8, MediaTypeNames.Application.Json);
 
       //act
-      var response = await client.PostAsync(UrlForKey(""), content);
+      var response = await Client.PostAsync(UrlForKey(""), content);
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert
@@ -148,10 +149,10 @@ namespace BlacklistManager.Test.Functional
         Password = "somePassword2",
         Username = null // missing username
       };
-      var content = new StringContent(JsonSerializer.Serialize(create), Encoding.UTF8, "application/json");
+      var content = new StringContent(JsonSerializer.Serialize(create), Encoding.UTF8, MediaTypeNames.Application.Json);
 
       //act
-      var response = await client.PostAsync(UrlForKey(""), content);
+      var response = await Client.PostAsync(UrlForKey(""), content);
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert

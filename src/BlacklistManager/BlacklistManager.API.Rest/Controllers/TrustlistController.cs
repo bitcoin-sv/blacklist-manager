@@ -4,11 +4,13 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Threading.Tasks;
 using BlacklistManager.API.Rest.ViewModels;
+using BlacklistManager.Domain.BackgroundJobs;
 using BlacklistManager.Domain.Repositories;
+using Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 
 namespace BlacklistManager.API.Rest.Controllers
 {
@@ -18,57 +20,87 @@ namespace BlacklistManager.API.Rest.Controllers
   [Authorize]
   public class TrustListController : ControllerBase
   {
-    private readonly ILogger<BlackListManagerLogger> logger;
-    private readonly ITrustListRepository trustList;
+    readonly ITrustListRepository _trustListRepository;
+    readonly IBackgroundJobs _backgroundJobs;
+    readonly ICourtOrderRepository _courtOrderRepository;
 
-    public TrustListController(
-      ILogger<BlackListManagerLogger> logger,
-      ITrustListRepository trustList)
+    public TrustListController(ITrustListRepository trustListRepository,
+                               IBackgroundJobs backgroundJobs,
+                               ICourtOrderRepository courtOrderRepository)
     {
-      this.trustList = trustList ?? throw new ArgumentNullException(nameof(trustList));
-      this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
+      _trustListRepository = trustListRepository ?? throw new ArgumentNullException(nameof(trustListRepository));
+      _backgroundJobs = backgroundJobs ?? throw new ArgumentNullException(nameof(backgroundJobs));
+      _courtOrderRepository = courtOrderRepository ?? throw new ArgumentNullException(nameof(courtOrderRepository));
     }
 
     [HttpPost]
-    public ActionResult<TrustListItemViewModelGet> Post(TrustListItemViewModelCreate data)
+    public async Task<ActionResult<TrustListItemViewModelGet>> PostAsync(TrustListItemViewModelCreate data)
     {
-      var created = trustList.CreatePublicKey(data.Id, data.Trusted ?? true, data.Remarks);
+      _backgroundJobs.CheckForOfflineMode();
+      var problemDetail = ProblemDetailsFactory.CreateProblemDetails(HttpContext, (int)HttpStatusCode.BadRequest);
+
+      var created = await _trustListRepository.CreatePublicKeyAsync(data.Id, data.Trusted ?? false, data.Remarks);
 
       if (created == null)
       {
-        var problemDetail = ProblemDetailsFactory.CreateProblemDetails(HttpContext, (int)HttpStatusCode.BadRequest);
         problemDetail.Status = (int)HttpStatusCode.Conflict;
         problemDetail.Title = $"Public key with id '{data.Id}' already exists";
         return Conflict(problemDetail);
       }
 
       return CreatedAtAction(
-        nameof(Get),
+        Consts.HttpMethodNameGET,
         new { publicKey = data.Id },
         new TrustListItemViewModelGet(created));
     }
 
     [HttpPut("{publicKey}")]
-    public IActionResult Put(string publicKey, TrustListItemViewModelCreate data)
+    public async Task<IActionResult> PutAsync(string publicKey, TrustListItemViewModelPut data)
     {
+      _backgroundJobs.CheckForOfflineMode();
+      var problemDetail = ProblemDetailsFactory.CreateProblemDetails(HttpContext, (int)HttpStatusCode.BadRequest);
+
       if (!string.IsNullOrEmpty(data.Id) && data.Id != publicKey)
       {
-        var problemDetail = ProblemDetailsFactory.CreateProblemDetails(HttpContext, (int)HttpStatusCode.BadRequest);
         problemDetail.Title = "The public key specified in URL does not match the one from message body";
         return BadRequest(problemDetail);
       }
 
-      if (!trustList.UpdatePublicKey(data.Id, data.Trusted ?? true, data.Remarks))
+      var existingKey = await _trustListRepository.GetPublicKeyAsync(publicKey);
+      if (existingKey == null)
       {
         return NotFound();
       }
+
+      if (data.ReplacedBy != null)
+      {
+        if (await _courtOrderRepository.GetNumberOfSignedDocumentsAsync(existingKey.ReplacedBy) > 0)
+        {
+          problemDetail.Title = "Public key cannot be replaced by another key, because the current replacement key already has associated documents.";
+          return BadRequest(problemDetail);
+        }
+        existingKey = await _trustListRepository.GetPublicKeyAsync(data.ReplacedBy);
+        if (existingKey == null)
+        {
+          problemDetail.Title = $"Public key {data.ReplacedBy} does not exist.";
+          return BadRequest(problemDetail);
+        }
+
+        var keyChain = await _trustListRepository.GetTrustListChainAsync(publicKey);
+        if (keyChain.Any(x => x.PublicKey == data.ReplacedBy))
+        {
+          problemDetail.Title = $"Public key {data.ReplacedBy} is already part of key chain. Key looping is not allowed.";
+          return BadRequest(problemDetail);
+        }
+      }
+      await _trustListRepository.UpdatePublicKeyAsync(data.Id, data.Trusted ?? false, data.Remarks, data.ReplacedBy);
       return NoContent();
     }
 
     [HttpGet("{publicKey}")]
-    public ActionResult<TrustListItemViewModelGet> Get(string publicKey)
+    public async Task<ActionResult<TrustListItemViewModelGet>> GetAsync(string publicKey)
     {
-      var result = trustList.GetPublicKey(publicKey);
+      var result = await _trustListRepository.GetPublicKeyAsync(publicKey);
       if (result == null)
       {
         return NotFound();
@@ -78,18 +110,10 @@ namespace BlacklistManager.API.Rest.Controllers
     }
 
     [HttpGet]
-    public ActionResult<IEnumerable<TrustListItemViewModelGet>> Get()
+    public async Task<ActionResult<IEnumerable<TrustListItemViewModelGet>>> GetAsync()
     {
-      var result = trustList.GetPublicKeys();
+      var result = await _trustListRepository.GetPublicKeysAsync();
       return Ok(result.Select(x => new TrustListItemViewModelGet(x)));
     }
-
-    [HttpDelete("{id}")]
-    public IActionResult DeleteNode(string id)
-    {
-      trustList.DeletePublicKey(id);
-      return NoContent();
-    }
-
   }
 }

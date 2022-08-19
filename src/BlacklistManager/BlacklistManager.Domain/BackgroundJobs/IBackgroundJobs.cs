@@ -1,12 +1,27 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
+using Common;
 using System.Threading.Tasks;
 
 namespace BlacklistManager.Domain.BackgroundJobs
 {
   public interface IBackgroundJobs
-  {    
-      /// <summary>
+  {
+    bool OfflineMode { get; }
+
+    BackgroundTasks BackgroundTasks { get; }
+
+    /// <summary>
+    /// Set value for off-line mode
+    /// </summary>
+    Task SetOfflineModeAsync(bool offline);
+
+    /// <summary>
+    /// Check if background jobs are in off-line mode. If they are not a BadRequestException will be thrown
+    /// </summary>
+    void CheckForOfflineMode();
+
+    /// <summary>
     /// Propagate funds states to nodes until all funds states are propagated successfully
     /// </summary>
     Task StartPropagateFundsStatesAsync();
@@ -22,9 +37,15 @@ namespace BlacklistManager.Domain.BackgroundJobs
     Task StartProcessCourtOrderAcceptancesAsync();
 
     /// <summary>
-    /// Process consensus activations until all are processed successfully
+    /// Submit whitelisted transaction ids for confiscation transactions
     /// </summary>
-    Task StartProcessConsensusActivationAsync();
+    /// <returns></returns>
+    Task StartSubmitWhitelistTxIdsAsync();
+
+    /// <summary>
+    /// Retry failed orders by downloading and processing them again
+    /// </summary>
+    Task StartFailedCourtOrdersProcessingAsync();
 
     /// <summary>
     /// Start all background jobs
@@ -34,6 +55,6 @@ namespace BlacklistManager.Domain.BackgroundJobs
     /// <summary>
     /// Stop all background jobs
     /// </summary>
-    Task StopAllAsync();    
-    }
+    Task StopAllAsync();
+  }
 }

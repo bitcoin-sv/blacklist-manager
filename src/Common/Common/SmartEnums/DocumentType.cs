@@ -13,47 +13,18 @@ namespace Common.SmartEnums
     public static readonly DocumentType DelegatedKeys = new DocumentType(3, "delegatedKeys");
     public static readonly DocumentType CourtOrderAcceptance = new DocumentType(4, "courtOrderAcceptance");
     public static readonly DocumentType ConsensusActivation = new DocumentType(5, "consensusActivation");
+    public static readonly DocumentType ConfiscationOrder = new DocumentType(6, "confiscationOrder");
+    public static readonly DocumentType ConfiscationTxDocument = new DocumentType(7, "confiscationTxDocument");
+    public static readonly DocumentType ConfiscationEnvelope = new DocumentType(8, "confiscationEnvelope");
+    public static readonly DocumentType CancelConfiscationOrder = new DocumentType(9, "cancelConfiscationOrder");
 
     public DocumentType(int id, string name) : base(id, name) { }
-
-    public static bool operator !=(DocumentType a, DocumentType b)
-    {
-      if ((ReferenceEquals(a, null) && !ReferenceEquals(b, null)) ||
-          (!ReferenceEquals(a, null) && ReferenceEquals(b, null)))
-      {
-        return true;
-      }
-
-      if (!ReferenceEquals(a, null) && !ReferenceEquals(b, null))
-      {
-        return a.Id != b.Id;
-      }
-      return false;
-    }
-    public static bool operator ==(DocumentType a, DocumentType b)
-    {
-      if (ReferenceEquals(a, null) && ReferenceEquals(b, null))
-      {
-        return true;
-      }
-
-      if (!ReferenceEquals(a, null) && !ReferenceEquals(b, null))
-      {
-        return a.Id == b.Id;
-      }
-
-      return false;
-    }
-
-    public static implicit operator string(DocumentType documentType) => documentType.Name;
-
-    public static implicit operator int(DocumentType documentType) => documentType.Id;
 
     public static explicit operator DocumentType(int id)
     {
       var docType = GetAll<DocumentType>().SingleOrDefault(x => x.Id == id);
       if (docType == null)
-        throw new Exception($"Invalid document type id '{id}'");
+        throw new InvalidOperationException($"Invalid document type id '{id}'");
       return docType;
     }
 
@@ -61,18 +32,28 @@ namespace Common.SmartEnums
     {
       var docType = GetAll<DocumentType>().SingleOrDefault(x => x.Name== name);
       if (docType == null)
-        throw new Exception($"Invalid document type name '{name}'");
+        throw new InvalidOperationException($"Invalid document type name '{name}'");
       return docType;
     }
 
-    public override bool Equals(object obj)
+    public static explicit operator DocumentType(CourtOrderType courtOrderType)
     {
-      return this.Id == ((DocumentType)obj).Id;
-    }
-
-    public override int GetHashCode()
-    {
-      return Id.GetHashCode();
+      if (courtOrderType == CourtOrderType.Freeze)
+      {
+        return DocumentType.FreezeOrder;
+      }
+      else if (courtOrderType == CourtOrderType.Unfreeze)
+      {
+        return DocumentType.UnfreezeOrder;
+      }
+      else if (courtOrderType == CourtOrderType.Confiscation)
+      {
+        return DocumentType.ConfiscationOrder;
+      }
+      else
+      {
+        throw new InvalidOperationException($"Conversion from CourtOrderType ({courtOrderType}) to DocumentType not supported.");
+      }
     }
   }
 

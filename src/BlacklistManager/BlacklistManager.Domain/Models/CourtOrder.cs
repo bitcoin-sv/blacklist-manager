@@ -2,6 +2,7 @@
 
 using Common;
 using Common.SmartEnums;
+using NBitcoin;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,151 +11,46 @@ namespace BlacklistManager.Domain.Models
 {
   public class CourtOrder
   {
-    public CourtOrder(
-      string courtOrderId, string courtOrderHash, DocumentType documentType)      
-    {
-      funds = new List<Fund>();
-      Status = CourtOrderStatus.Imported;
+    public string CourtOrderId { get; init; }
 
-      CourtOrderId = courtOrderId;
-      CourtOrderHash = courtOrderHash;
-      DocumentType = (DocumentType)documentType;
-      Type = ToCourtOrderType(DocumentType); 
-    }
-
-    public CourtOrder(
-      string courtOrderId, string courtOrderHash, DocumentType documentType, 
-      DateTime? validFrom, DateTime? validTo)
-      : this(courtOrderId, courtOrderHash, documentType)
+    private readonly DocumentType documentType;
+    public DocumentType DocumentType
     {
-      ValidFrom = validFrom;
-      ValidTo = validTo;
-    }
-
-    public CourtOrder(
-      string courtOrderId, string courtOrderHash, DocumentType documentType, 
-      DateTime? validFrom, DateTime? validTo,
-      string freezeCourtOrderId,
-      string frezeCourtOrderHash)
-      : this(courtOrderId, courtOrderHash, documentType, validFrom, validTo)
-    {
-      FreezeCourtOrderId = freezeCourtOrderId;
-      FreezeCourtOrderHash = frezeCourtOrderHash;
-    }
-
-    public CourtOrder(
-      Int32 courtOrderType, string courtOrderId, DateTime? validFrom, DateTime? validTo,
-      string courtOrderHash, Int32? enforceAtHeight, Int32 courtOrderStatus,
-      string freezeCourtOrderId, string freezeCourtOrderHash)
-      : this(courtOrderId, courtOrderHash, ToDocumentType(courtOrderType), validFrom, validTo,freezeCourtOrderId, freezeCourtOrderHash)
-    {
-      Status = (CourtOrderStatus)courtOrderStatus;
-      EnforceAtHeight = enforceAtHeight;
-    }
-
-    public static CourtOrderType ToCourtOrderType(string documentType)
-    {
-      return documentType switch
+      get
       {
-        _ when documentType == DocumentType.FreezeOrder => CourtOrderType.Freeze,
-        _ when documentType == DocumentType.UnfreezeOrder => CourtOrderType.Unfreeze,
-        _ => throw new BadRequestException($"Unknown DocumentType '{documentType}'")
-      };
-    }
-
-    public static DocumentType ToDocumentType(int courtOrderTypeId)
-    {
-      return ToDocumentType((CourtOrderType)courtOrderTypeId);
-    }
-
-    public static DocumentType ToDocumentType(CourtOrderType type)
-    {
-
-      return type switch
-      {
-        CourtOrderType.Freeze => DocumentType.FreezeOrder,
-        CourtOrderType.Unfreeze => DocumentType.UnfreezeOrder,
-        _ => throw new BadRequestException($"Unknown CourtOrderType '{type}'")
-      };
-    }
-
-    public string CourtOrderId { get; private set; }
-    public DocumentType DocumentType { get; private set; }
-
-    public string CourtOrderHash { get; private set; }
-
-    public int? EnforceAtHeight { get; private set; }
-
-    public void SetCourtOrderHash(string hash)
-    {
-      CourtOrderHash = hash;
-    }
-
-    public CourtOrderStatus Status { get; private set; }
-
-    public string FreezeCourtOrderId { get; private set; }
-    public string FreezeCourtOrderHash { get; private set; }
-
-    public CourtOrderType Type { get; private set; }
-    
-    /// <summary>
-    /// Get imported court order active status
-    /// </summary>
-    public CourtOrderStatus GetActiveStatus()
-    {
-      if (Status == CourtOrderStatus.Imported)
-      {
-        return Type switch
-        {
-          CourtOrderType.Freeze => CourtOrderStatus.FreezePolicy,
-          CourtOrderType.Unfreeze => CourtOrderStatus.UnfreezeNoConsensusYet,
-          _ => throw new Exception($"Unable to activate court order '{CourtOrderHash}'. Unknown courtOrderType '{Type}'"),
-        };
-      }
-      return Status;
-    }
-
-    public bool IsStatusChangeValid(CourtOrderStatus newStatus)
-    {
-      switch (newStatus)
-      {
-        case CourtOrderStatus.FreezePolicy:
-          if (Status != CourtOrderStatus.Imported)
-          {
-            return false;
-          }
-          break;
-        case CourtOrderStatus.FreezeConsensus:
-          if (Status != CourtOrderStatus.FreezePolicy)
-          {
-            return false;
-          }
-          break;
-        case CourtOrderStatus.UnfreezeNoConsensusYet:
-          if (Status != CourtOrderStatus.Imported)
-          {
-            return false;
-          }
-          break;
-        case CourtOrderStatus.UnfreezeConsensus:
-          if (Status != CourtOrderStatus.UnfreezeNoConsensusYet)
-          {
-            return false;
-          }
-          break;
-        case CourtOrderStatus.Imported:
-          return false;
-        default:
-          throw new InvalidOperationException($"Unknown court order status '{newStatus}'");
+        return documentType;
       }
 
-      return true;
+      init
+      {
+        documentType = value;
+        Type = (CourtOrderType)value.Name;
+      }
     }
 
-    public DateTime? ValidTo { get; private set; }
-    public DateTime? ValidFrom { get; private set; } // for unfreezeorder
+    public string Blockchain { get; set; }
 
-    private readonly List<Fund> funds;
+    public string CourtOrderHash { get; init; }
+
+    public int? EnforceAtHeight { get; init; }
+
+    public CourtOrderStatus Status { get; init; } = CourtOrderStatus.Imported;
+
+    public string FreezeCourtOrderId { get; init; }
+    public string FreezeCourtOrderHash { get; init; }
+
+    public CourtOrderType Type { get; init; }
+
+    public ConfiscationDestination Destination { get; init; }
+
+    public DateTime? ValidTo { get; init; }
+    public DateTime? ValidFrom { get; init; } // for unfreezeorder
+
+    public string SignedByKey { get; init; }
+
+    public DateTime SignedDate { get; init; }
+
+    private readonly List<Fund> funds = new();
     public IReadOnlyCollection<Fund> Funds => funds;
 
     private bool? isValid = null;
@@ -183,6 +79,109 @@ namespace BlacklistManager.Domain.Models
       }
     }
 
+    /// <summary>
+    /// Get imported court order active status
+    /// </summary>
+    public CourtOrderStatus GetActiveStatus()
+    {
+      if (Status == CourtOrderStatus.Imported)
+      {
+        if (Type == CourtOrderType.Freeze)
+        {
+          return CourtOrderStatus.FreezePolicy;
+        }
+        else if (Type == CourtOrderType.Unfreeze)
+        {
+          return CourtOrderStatus.UnfreezeNoConsensusYet;
+        }
+        else if (Type == CourtOrderType.Confiscation)
+        {
+          return CourtOrderStatus.ConfiscationPolicy;
+        }
+        throw new InvalidOperationException($"Unable to activate court order '{CourtOrderHash}'. Unknown courtOrderType '{Type}'");
+      }
+      return Status;
+    }
+
+    public bool IsStatusChangeValid(CourtOrderStatus newStatus)
+    {
+      switch (newStatus)
+      {
+        case CourtOrderStatus.ConfiscationPolicy:
+        case CourtOrderStatus.FreezePolicy:
+          if (Status != CourtOrderStatus.Imported)
+          {
+            return false;
+          }
+          break;
+        case CourtOrderStatus.FreezeConsensus:
+          if (Status != CourtOrderStatus.FreezePolicy)
+          {
+            return false;
+          }
+          break;
+        case CourtOrderStatus.UnfreezeNoConsensusYet:
+          if (Status != CourtOrderStatus.Imported)
+          {
+            return false;
+          }
+          break;
+        case CourtOrderStatus.UnfreezeConsensus:
+          if (Status != CourtOrderStatus.UnfreezeNoConsensusYet)
+          {
+            return false;
+          }
+          break;
+        case CourtOrderStatus.Imported:
+          return false;
+        case CourtOrderStatus.ConfiscationConsensus:
+          if (Status != CourtOrderStatus.ConfiscationPolicy)
+          {
+            return false;
+          }
+          break;
+        case CourtOrderStatus.ConfiscationConsensusWhitelisted:
+          if (Status != CourtOrderStatus.ConfiscationConsensus)
+          {
+            return false;
+          }
+          break;
+        case CourtOrderStatus.ConfiscationCancelled:
+          if (Status != CourtOrderStatus.ConfiscationPolicy)
+          {
+            return false;
+          }
+          break;
+        default:
+          throw new InvalidOperationException($"Unknown court order status '{newStatus}'");
+      }
+
+      return true;
+    }
+
+    public bool DoNetworksMatch(string network, out string error)
+    {
+      error = null;
+      if (String.IsNullOrEmpty(Blockchain))
+      {
+        error = "Blockchain parameter on Court order is not set.";
+        return false;
+      }
+      var coNetwork = Blockchain.Split('-');
+      if (coNetwork.Length != 2)
+      {
+        error = "Blockchain data is not in valid format.";
+        return false;
+      }
+      if (coNetwork[1] != network)
+      {
+        error = "Blacklist managers network doesn't match the network specified on Court order.";
+        return false;
+      }
+      return true;
+    }
+
+
     private void Validate()
     {
       var validator = new CourtOrderValidator(this);
@@ -190,15 +189,15 @@ namespace BlacklistManager.Domain.Models
       isValid = !validationMessages.Any();
     }
 
-    public void AddFund(TxOut txOut)
+    public void AddFund(TxOut txOut, long value)
     {
-      funds.Add(new Fund(txOut));
+      funds.Add(new Fund(txOut, value));
     }
-    public void AddFunds(IEnumerable<TxOut> txOuts)
+    public void AddFunds(IEnumerable<(TxOut txOut, long value)> funds)
     {
-      foreach (var txOut in txOuts)
+      foreach (var fund in funds)
       {
-        funds.Add(new Fund(txOut));
+        this.funds.Add(new Fund(fund.txOut, fund.value));
       }
     }
 

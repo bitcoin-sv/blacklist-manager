@@ -11,7 +11,7 @@ using System.Threading.Tasks;
 using BlacklistManager.API.Rest.ViewModels;
 using BlacklistManager.Domain;
 using BlacklistManager.Domain.Actions;
-using BlacklistManager.Domain.Models;
+using BlacklistManager.Domain.BackgroundJobs;
 using Common;
 using Common.SmartEnums;
 using Microsoft.AspNetCore.Authorization;
@@ -27,40 +27,45 @@ namespace BlacklistManager.API.Rest.Controllers
   [Authorize]
   public class SigningKeyController : ControllerBase
   {
-    readonly ILogger<BlackListManagerLogger> logger;
-    readonly IDelegatedKeys delegatedKeys;
-    readonly Network BitcoinNetwork;
-    readonly string encryptionKey;
+    readonly ILogger<BlackListManagerLogger> _logger;
+    readonly IDelegatedKeys _delegatedKeys;
+    readonly IBackgroundJobs _backgroundJobs;
+    readonly Network _bitcoinNetwork;
+    readonly string _encryptionKey;
 
     public SigningKeyController(ILogger<BlackListManagerLogger> logger,
                                 IDelegatedKeys delegatedKeys,
+                                IBackgroundJobs backgroundJobs,
                                 IOptions<AppSettings> options)
     {
-      this.logger = logger;
-      this.delegatedKeys = delegatedKeys;
-      BitcoinNetwork = Network.GetNetwork(options.Value.BitcoinNetwork);
-      encryptionKey = options.Value.EncryptionKey;
+      _logger = logger;
+      _delegatedKeys = delegatedKeys;
+      _backgroundJobs = backgroundJobs;
+      _bitcoinNetwork = Network.GetNetwork(options.Value.BitcoinNetwork);
+      _encryptionKey = options.Value.EncryptionKey;
     }
 
     [HttpPost()]
-    public async Task<ActionResult> ImportSigningKeyAsync(SignerKeyViewModelCreate signerKey)
+    public async Task<ActionResult<SignerKeyViewModelGet>> ImportSigningKeyAsync(SignerKeyViewModelCreate signerKey)
     {
-      var key = Key.Parse(signerKey.PrivateKey, BitcoinNetwork);
-      var encrypted = Encryption.Encrypt(signerKey.PrivateKey, encryptionKey);
-      var id = await delegatedKeys.InsertDelegatedKeyAsync(encrypted, key.PubKey.ToHex(), signerKey.DelegationRequired, !signerKey.DelegationRequired);
+      _backgroundJobs.CheckForOfflineMode();
+      var key = Key.Parse(signerKey.PrivateKey, _bitcoinNetwork);
+      var encrypted = EncryptionTools.Encrypt(signerKey.PrivateKey, _encryptionKey);
+      var id = await _delegatedKeys.InsertDelegatedKeyAsync(encrypted, key.PubKey.ToHex(), signerKey.DelegationRequired, !signerKey.DelegationRequired);
 
       if (id == 0)
       {
         return Conflict();
       }
 
-      return Ok(id);
+      var domainDelegatedKey = (await _delegatedKeys.GetDelegatedKeysAsync(id)).Single();
+      return Ok(new SignerKeyViewModelGet(domainDelegatedKey));
     }
 
     [HttpGet()]
     public async Task<ActionResult<IEnumerable<SignerKeyViewModelGet>>> GetSignerKeysAsync(int? signerId)
     {
-      var domainDelegatedKeys = await delegatedKeys.GetDelegatedKeysAsync(signerId);
+      var domainDelegatedKeys = await _delegatedKeys.GetDelegatedKeysAsync(signerId);
       if (!domainDelegatedKeys.Any())
       {
         return NotFound();
@@ -74,6 +79,7 @@ namespace BlacklistManager.API.Rest.Controllers
     [HttpPost("{signerId}/minerKey")]
     public async Task<ActionResult> ImportMinerKeyAsync(int signerId, MinerKeyViewModelCreate minerKey)
     {
+      _backgroundJobs.CheckForOfflineMode();
       var problemDetails = ProblemDetailsFactory.CreateProblemDetails(HttpContext, (int)HttpStatusCode.BadRequest);
 
       if (string.IsNullOrEmpty(minerKey.PublicKey) && string.IsNullOrEmpty(minerKey.PublicKeyAddress))
@@ -91,7 +97,7 @@ namespace BlacklistManager.API.Rest.Controllers
         catch (Exception ex)
         {
           problemDetails.Detail = "Invalid 'publicKey'";
-          logger.LogError($"{problemDetails.Detail}. {ex}");
+          _logger.LogError($"{problemDetails.Detail}. {ex}");
           return BadRequest(problemDetails);
         }
 
@@ -100,32 +106,32 @@ namespace BlacklistManager.API.Rest.Controllers
       {
         try
         {
-          _ = new BitcoinPubKeyAddress(minerKey.PublicKeyAddress, BitcoinNetwork);
+          _ = new BitcoinPubKeyAddress(minerKey.PublicKeyAddress, _bitcoinNetwork);
         }
         catch 
         {
           // Let's try it with segwit addresses
           try
           {
-            _ = new BitcoinWitPubKeyAddress(minerKey.PublicKeyAddress, BitcoinNetwork);
+            _ = new BitcoinWitPubKeyAddress(minerKey.PublicKeyAddress, _bitcoinNetwork);
           }
           catch
           {
             try
             {
-              _ = new BitcoinScriptAddress(minerKey.PublicKeyAddress, BitcoinNetwork);
+              _ = new BitcoinScriptAddress(minerKey.PublicKeyAddress, _bitcoinNetwork);
             }
             catch (Exception ex)
             {
               problemDetails.Detail = "Invalid 'publicKeyAddress'";
-              logger.LogError($"{problemDetails.Detail}. {ex}");
+              _logger.LogError($"{problemDetails.Detail}. {ex}");
               return BadRequest(problemDetails);
             }
           }
         }
       }
 
-      var delegatedKey = (await delegatedKeys.GetDelegatedKeysAsync(signerId)).SingleOrDefault();
+      var delegatedKey = (await _delegatedKeys.GetDelegatedKeysAsync(signerId)).SingleOrDefault();
       if (delegatedKey == null)
       {
         return NotFound();
@@ -150,24 +156,25 @@ namespace BlacklistManager.API.Rest.Controllers
       };
       var delegatedKeyJSON = JsonSerializer.Serialize(delegatedKeyDocument, SerializerOptions.SerializeOptionsNoPrettyPrint);
 
-      var id = await delegatedKeys.InsertDelegatingKeyAsync(minerKey.PublicKeyAddress, minerKey.PublicKey, delegatedKeyJSON, createdAt, signerId);
+      var id = await _delegatedKeys.InsertDelegatingKeyAsync(minerKey.PublicKeyAddress, minerKey.PublicKey, delegatedKeyJSON, createdAt, signerId);
 
       if (id == 0)
       {
         return Conflict();
 
       }
-      var domainDelegatingKeys = await delegatedKeys.GetDelegatingKeysAsync(id);
+      var domainDelegatingKeys = await _delegatedKeys.GetDelegatingKeysAsync(id);
 
       return Ok(new MinerKeyViewModelGet (domainDelegatingKeys.Single()));
     }
 
     [HttpPut("{signerId}/minerKey")]
-    public async Task<ActionResult> PutAsync(int signerId, MinerKeyViewModelUpdate minerKeyUpdate)
+    public async Task<ActionResult<MinerKeyViewModelGet>> PutAsync(int signerId, MinerKeyViewModelUpdate minerKeyUpdate)
     {
+      _backgroundJobs.CheckForOfflineMode();
       var problemDetails = ProblemDetailsFactory.CreateProblemDetails(HttpContext, (int)HttpStatusCode.BadRequest);
 
-      var delegatingKey = (await delegatedKeys.GetDelegatingKeysAsync(minerKeyUpdate.Id)).SingleOrDefault();
+      var delegatingKey = (await _delegatedKeys.GetDelegatingKeysAsync(minerKeyUpdate.Id)).SingleOrDefault();
       if (delegatingKey == null)
       {
         return NotFound();
@@ -200,7 +207,7 @@ namespace BlacklistManager.API.Rest.Controllers
           problemDetails.Detail = "Signature is not in base64 format";
           return BadRequest(problemDetails);
         }
-        signatureVerified = SignatureTools.VerifyBitcoinSignature(jsonEnvelope.Payload, minerKeyUpdate.Signature, null, out var pubKey, delegatingKey.PublicKeyAddress, BitcoinNetwork);
+        signatureVerified = SignatureTools.VerifyBitcoinSignature(jsonEnvelope.Payload, minerKeyUpdate.Signature, null, out var pubKey, delegatingKey.PublicKeyAddress, _bitcoinNetwork);
         if (!signatureVerified)
         {
           problemDetails.Detail = "Signature is invalid.";
@@ -225,21 +232,22 @@ namespace BlacklistManager.API.Rest.Controllers
         }
       }
       
-      var jsonString = JsonSerializer.Serialize(jsonEnvelope, SerializerOptions.SerializeOptions);
+      var jsonString = jsonEnvelope.ToJson();
       if (minerKeyUpdate.ActivateKey)
       {
-        await delegatedKeys.ActivateDelegatedKeyAsync(delegatingKey.DelegatedKeyId);
+        await _delegatedKeys.ActivateDelegatedKeyAsync(delegatingKey.DelegatedKeyId);
       }
-      await delegatedKeys.MarkDelegatingKeyValidatedAsync(delegatingKey.DelegatingKeyId, jsonString);
+      await _delegatedKeys.MarkDelegatingKeyValidatedAsync(delegatingKey.DelegatingKeyId, jsonString);
+      delegatingKey = (await _delegatedKeys.GetDelegatingKeysAsync(minerKeyUpdate.Id)).SingleOrDefault();
 
-      return Ok("minerKey was successfully validated.");
+      return Ok(new MinerKeyViewModelGet(delegatingKey));
     }
 
 
     [HttpGet("minerKey")]
     public async Task<ActionResult<IEnumerable<MinerKeyViewModelGet>>> GetMinerKeysAsync(int? minerId)
     {
-      var domainDelegatingKeys = await delegatedKeys.GetDelegatingKeysAsync(minerId);
+      var domainDelegatingKeys = await _delegatedKeys.GetDelegatingKeysAsync(minerId);
       if (!domainDelegatingKeys.Any())
       {
         return NotFound();

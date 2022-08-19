@@ -8,9 +8,11 @@ Steps described in **Configuring application** are for managing Blacklist manage
 
 *Note: For cleaning up docker containers and removing Blacklist manager see [Removing docker images](doc/DockerImagesRemoving.md)*
 
-BlacklistManager is a REST API that serves as an intermediary between bitcoind nodes and Alert Managers that are trusted by BlacklistManager.
+BlacklistManager is a REST API that serves as an intermediary between bitcoind nodes and AlertManagers that are trusted by BlacklistManager.
 
 ## Running BM application
+
++ extract projectX package `projectX-BM.zip` from to target folder
 
 + run this commands in target folder to load docker images
 
@@ -28,10 +30,14 @@ BlacklistManager is a REST API that serves as an intermediary between bitcoind n
   | ----------- | ----------- |
   | POSTGREDB_PASSWORD | Password of the postgres DB user that has create DB rights |
   | BMAPP_DB_PASSWORD | Password for database containing application data |
+  | BLOCKCHAIN | Blockchain that BM is processing (BSV/BTC/BCH) |
   | BITCOIN_NETWORK | bitcoind network that app is configured for [RegTest\|Main\|TestNet] |
   | BMAPP_REST_APIKEY | api key that will be used by clients for REST authentication |
   | ENCRYPTION_KEY | Key used to encrypt private keys |
-  | BACKGROUND_JOB_DELAY_TIME | Delay for background jobs between actions (in miliseconds) |
+  | BACKGROUND_JOB_DELAY_TIME | Delay time between successful job runs (in seconds) |
+  | CONSENSUS_ACTIVATION_DELAY_TIME | Delay time between consensus activations retrieval (in seconds) |
+  | ERROR_RETRY_DELAY_TIME | Delay time if error occured while processing job (in seconds) |
+  | CONSENSUS_WAIT_DAYS | Number of days that BM will keep trying to retrieve consensus activation from LEE |
 
 + run this command in target folder to start BlacklistManager application
 
@@ -42,11 +48,11 @@ BlacklistManager is a REST API that serves as an intermediary between bitcoind n
 After running up the application for the first time, following steps have to be taken for BlacklistManager to use it's full potential as a tool that ensures that new court orders and funds it uses (by frezing/unfreezing) will be propagated to Bitcoin nodes. Steps that should be done in following order:
 
 1. [Add Bitcoin node](#1.-add-bitcoind-node-connection-parameters)
-2. [Add Alert Manager's public key as trusted key](#2.-add-public-key-to-trust-list)
+2. [Add AlertManager's public key as trusted key](#2.-add-public-key-to-trust-list)
 3. [Add signing key](#3.-adding-signing-key)
 4. [Add miner key](#5.-adding-miner-key-to-signing-key)
 5. [Validate and activate miner key](#6.-validate-and-activate-miner-key)
-6. [Add connection to desired Alert Manager](#7.-Add-alertmanager-endpoint-connection-parameters)
+6. [Add connection to desired AlertManager](#7.-Add-alertmanager-endpoint-connection-parameters)
 7. [Check everything is set up properly](#8.-test-everything-in-blacklist-manager-is-set-up)
 
 ## Configuring BM application
@@ -80,7 +86,7 @@ Parameter desription:
 
 ### 2. Add public key to trust list
 
-Each Alert Manager has it's own private key, which is used to sign all data sensitive JSON messages that are returned when calling Alert Manager's REST API. For BlacklistManager to validate that such messages returned by Alert Manager are indeed valid it has to store public key pair for each Alert Manager that it will be calling.
+Each AlertManager has it's own private key, which is used to sign all data sensitive JSON messages that are returned when calling AlertManager's REST API. For BlacklistManager to validate that such messages returned by AlertManager are indeed valid it has to store public key pair for each AlertManager that it will be calling.
 
 Usage:
 
@@ -92,12 +98,12 @@ Parameter desription:
 
 | Parameter | Description |
 | ----------- | ----------- |
-| [publickey] | WIF representation of public key part of Alert Manager environment variable AMAPP_PRIVATE_KEY |
+| [publickey] | WIF representation of public key part of AlertManager environment variable NTAPP_PRIVATE_KEY |
 | [apiKey] | environment variable BMAPP_REST_APIKEY as defined in .env file |
 
 ### 3. Adding signing key
 
-BlacklistManager must send sensitive data to Alert Manager (for example JSON document for Court order acceptance). To sign this data, active signing key must be present in database. User can add a new private key to BlacklistManager anytime, but upon activation of this new key, the old one will be deactivated.
+BlacklistManager must send sensitive data to AlertManager (for example JSON document for Court order acceptance). To sign this data, active signing key must be present in database. User can add a new private key to BlacklistManager anytime, but upon activation of this new key, the old one will be deactivated.
 
 Two types of signing keys can be added. Which type is added is controlled by field **delegationRequired** with values:
 
@@ -148,7 +154,7 @@ Parameter desription:
 
 ### 5. Adding miner key to signing key
 
-Miner key is added by providing either **publicKey** or **publicKeyAddress** (one of them must be set...also both can be set, but address must be derived from that same public key ). Miner key is used by Alert Manager when trying to determine how many blocks have been "mined" with this key. This information is used by the user of Alert Manager, when it tries to determine how much hash power has voted in favor of a court order.
+Miner key is added by providing either **publicKey** or **publicKeyAddress** (one of them must be set...also both can be set, but address must be derived from that same public key ). Miner key is used by AlertManager when trying to determine how many blocks have been "mined" with this key. This information is used by the user of AlertManager, when it tries to determine how much hash power has voted in favor of a court order.
 
 As a response the method returns JSON document, where the content of **payload** field must be signed as specified by [JSON Envelope specification](https://github.com/bitcoin-sv-specs/brfc-misc/tree/master/jsonenvelope) or with bitcoind RPC method **signmessage** as described [here](#9.-sign-payload-with-bitcoind-signmessage-method).
 
@@ -186,7 +192,7 @@ Multiple miner keys can be added to a signer key. When the miner key/signer key 
 Usage:
 
 ```bash
-docker exec bmapp /app/cli/BlacklistManager.Cli bmapp PUT signingKey/[signerId]/minerKey "{ \"id\":\"[minerId]\", \"signature\" : \"[signature]\", \"activateKey\" : true }" --apiKey=[apikey]
+docker exec bmapp /app/cli/BlacklistManager.Cli bmapp PUT signingKey/[signerId]/minerKey "{ \"id\":[minerId], \"signature\" : \"[signature]\", \"activateKey\" : true }" --apiKey=[apikey]
 ```
 
 Parameter desription:
@@ -201,9 +207,9 @@ Parameter desription:
 
 ### 7. Add AlertManager endpoint connection parameters
 
-BlacklistManager must have at least one Alert Manager endpoint before it can start to download any court orders that have to be enforced by bitcoin nodes.
+BlacklistManager must have at least one AlertManager endpoint before it can start to download any court orders that have to be enforced by bitcoin nodes.
 
-*Note: Before Alert Manager endpoint is added to database, BlacklistManager performs a connection check to the endpoint, and if successfull it also verifies if the returned public key is trusted and signature is valid.*
+*Note: Before AlertManager endpoint is added to database, BlacklistManager performs a connection check to the endpoint, and if successfull it also verifies if the returned public key is trusted and signature is valid.*
 
 Usage:
 
@@ -215,8 +221,8 @@ Parameter desription:
 
 | Parameter | Description |
 | ----------- | ----------- |
-| [https://host:port] | Alert Manager endpoint URL  |
-| [leeApiKey] | client authentication key as defined in Alert Manager client settings |
+| [https://host:port] | AlertManager endpoint URL  |
+| [leeApiKey] | client authentication key as defined in AlertManager client settings |
 | [apiKey] | environment variable BMAPP_REST_APIKEY as defined in .env file |
 
 ### 8. Test everything in blacklist manager is set up

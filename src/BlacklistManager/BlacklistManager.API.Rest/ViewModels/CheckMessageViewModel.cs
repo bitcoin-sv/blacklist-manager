@@ -1,55 +1,51 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
+using System;
+using System.Collections.Generic;
 
 namespace BlacklistManager.API.Rest.ViewModels
 {
+  [Serializable]
   public class CheckMessageViewModel
   {
-    private const string BlackListManager = "Blacklist Manager";
-    private const string AlertManager = "Alert Manager";
-    private const string BitcoinD = "bitcoind";
+    private const string BLACKLIST_MANAGER = "Blacklist Manager";
+    private const string ALERT_MANAGER = "Alert Manager";
+    private const string BITCOIND = "bitcoind";
 
-    public string Component { get; set; }
-    public string Endpoint { get; set; }
-    public string Severity { get; private set; }
-    public string Message { get; set; }
+    private const string ERROR = "Error";
+    private const string WARNING = "Warning";
+    private const string INFO = "Info";
 
-    public static CheckMessageViewModel SetBitcoindError(string endpoint, string message) => SetError(BitcoinD, endpoint, message);
-    public static CheckMessageViewModel SetBMError(string endpoint, string message) => SetError(BlackListManager, endpoint, message);
-    public static CheckMessageViewModel SetAlertManagerError(string endpoint, string message) => SetError(AlertManager, endpoint, message);
-    public static CheckMessageViewModel SetAlertManagerWarning(string endpoint, string message) => SetWarning(AlertManager, endpoint, message);
-    public static CheckMessageViewModel SetAlertManagerInfo(string endpoint, string message) => SetInfo(AlertManager, endpoint, message);
+    public string Component { get; init; }
+    public string Endpoint { get; init; }
+    public string Severity { get; init; }
+    public List<string> Messages { get; init; } = new ();
 
-    private static CheckMessageViewModel SetError(string component, string endpoint, string message)
+    public static CheckMessageViewModel SetBitcoindError(string endpoint, string message) => SetData(BITCOIND, endpoint, ERROR, message);
+    public static CheckMessageViewModel SetBMError(string endpoint, string message) => SetData(BLACKLIST_MANAGER, endpoint, ERROR, message);
+    public static CheckMessageViewModel SetAlertManagerError(string endpoint, string message) => SetData(ALERT_MANAGER, endpoint, ERROR, message);
+    public static CheckMessageViewModel SetAlertManagerWarning(string endpoint, string message) => SetData(ALERT_MANAGER, endpoint, WARNING, message);
+    public static CheckMessageViewModel SetAlertManagerInfo(string endpoint, string message) => SetData(ALERT_MANAGER, endpoint, INFO, message);
+    public static CheckMessageViewModel SetAlertManagerInfo(string endpoint, string[] message) => SetData(ALERT_MANAGER, endpoint, INFO, message);
+
+    private static CheckMessageViewModel SetBasicData(string component, string endpoint, string severity) => new CheckMessageViewModel
+                                                                                                             {
+                                                                                                               Component = component,
+                                                                                                               Endpoint = endpoint,
+                                                                                                               Severity = severity
+                                                                                                             };
+    private static CheckMessageViewModel SetData(string component, string endpoint, string severity, string message)
     {
-      return new CheckMessageViewModel
-      {
-        Component = component,
-        Endpoint = endpoint,
-        Message = message,
-        Severity = "Error"
-      };
+      var checkMessage = SetBasicData(component, endpoint, severity);
+      checkMessage.Messages.Add(message);
+
+      return checkMessage;
     }
-
-    private static CheckMessageViewModel SetWarning(string component, string endpoint, string message)
+    private static CheckMessageViewModel SetData(string component, string endpoint, string severity, string[] message)
     {
-      return new CheckMessageViewModel
-      {
-        Component = component,
-        Endpoint = endpoint,
-        Message = message,
-        Severity = "Warning"
-      };
-    }
+      var checkMessage = SetBasicData(component, endpoint, severity);
+      checkMessage.Messages.AddRange(message);
 
-    private static CheckMessageViewModel SetInfo(string component, string endpoint, string message)
-    {
-      return new CheckMessageViewModel
-      {
-        Component = component,
-        Endpoint = endpoint,
-        Message = message,
-        Severity = "Info"
-      };
+      return checkMessage;
     }
   }
 }

@@ -4,8 +4,7 @@ using BlacklistManager.Domain.Models;
 using BlacklistManager.Domain.Repositories;
 using Common;
 using Dapper;
-using Microsoft.Extensions.Logging;
-using Npgsql;
+using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -14,21 +13,17 @@ namespace BlacklistManager.Infrastructure.Repositories
 {
   public class DelegatedKeyRepositoryPostgres : IDelegatedKeyRepositoryPostgres
   {
-    private readonly string connectionString;
-    private readonly ILogger logger;
+    private readonly string _connectionString;
 
     public DelegatedKeyRepositoryPostgres(
-      string connectionString,
-      ILoggerFactory logger)
+      IConfiguration configuration)
     {
-      this.connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
-      this.logger = logger.CreateLogger(LogCategories.Database) ?? throw new ArgumentNullException(nameof(logger));
+      _connectionString = configuration["BlacklistManagerConnectionStrings:DBConnectionString"];
     }
 
     public async Task<int> InsertDelegatedKeyAsync(byte[] privateKey, string publicKey, bool delegationRequired, bool isActive)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       using var transaction = connection.BeginTransaction();
       
       string cmdText = @"
@@ -52,8 +47,7 @@ RETURNING delegatedKeyId;";
 
     public async Task<int> InsertDelegatingKeyAsync(string publicKeyAddress, string publicKey, string delegatedKeyJSON, DateTime createdAt, int delegatedKeyId)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       using var transaction = connection.BeginTransaction();
 
       string cmdText = @"
@@ -78,8 +72,7 @@ RETURNING delegatingKeyId;";
 
     public async Task<IEnumerable<DelegatedKey>> GetDelegatedKeysAsync(int? delegatedKeyId)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       using var transaction = connection.BeginTransaction();
 
       string cmdText = "SELECT * FROM DelegatedKey " +
@@ -89,8 +82,7 @@ RETURNING delegatingKeyId;";
 
     public async Task<IEnumerable<DelegatingKey>> GetDelegatingKeysAsync(int? delegatingKeyId)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       using var transaction = connection.BeginTransaction();
 
       string cmdText = @"SELECT a.*, b.publicKey DelegatedPublicKey FROM DelegatingKey a 
@@ -101,8 +93,7 @@ RETURNING delegatingKeyId;";
 
     public async Task<int> GetDelegatedKeyIdAsync(string publicKey)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       using var transaction = connection.BeginTransaction();
 
       string cmdText = "SELECT delegatedKeyId FROM DelegatedKey WHERE publicKey = @publicKey";
@@ -111,8 +102,7 @@ RETURNING delegatingKeyId;";
 
     public async Task ActivateDelegatedKeyAsync(int delegatedKeyId, DateTime activationDate)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       using var transaction = connection.BeginTransaction();
 
       string cmdTextDeactivate = "UPDATE DelegatedKey SET isActive = false";
@@ -127,8 +117,7 @@ RETURNING delegatingKeyId;";
 
     public async Task MarkDelegatingKeyValidatedAsync(int delegatingKeyId, string signedDelegatedKeyJSON, DateTime validatedAt)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       using var transaction = connection.BeginTransaction();
 
       string cmdText = @"UPDATE DelegatingKey SET validatedAt = @validatedAt, dataToSign = null, signedDelegatedKeyJson = @signedDelegatedKeyJSON 
@@ -140,8 +129,7 @@ RETURNING delegatingKeyId;";
 
     public async Task<IEnumerable<DelegatingKey>> GetValidDelegatingKeysAsync(int delegatedKeyId)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       using var transaction = connection.BeginTransaction();
 
       string cmdText = "SELECT * " +

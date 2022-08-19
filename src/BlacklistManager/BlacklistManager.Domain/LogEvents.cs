@@ -2,7 +2,7 @@
 
 namespace BlacklistManager.Domain
 {
-  class LogEvents
+  public static class LogEvents
   {
     public const int CourtOrderStatusChanged = 1000;
     public const int FundStatePropagation = 2000;

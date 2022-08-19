@@ -15,16 +15,15 @@ namespace Common
   {
     readonly string groupKey;
     Task runningTask;
-    public CancellationTokenSource groupCancellationSource;
-
+    CancellationTokenSource groupCancellationSource;
     readonly object objLock = new object();
     long? progressCounter;
-
-    public Task Task => runningTask;
-
-    private readonly ILogger<BackgroundTask> logger;
+    readonly ILogger<BackgroundTask> logger;
     readonly IServiceProvider serviceProvider;
     readonly Func<CancellationToken, IProgress<long>, IServiceProvider, Task> action;
+    
+    public Task Task => runningTask;
+    public BackgroundTaskStatus Status { get; set; }
 
     public BackgroundTask(
       string groupKey, 
@@ -43,6 +42,7 @@ namespace Common
 
     private void Initialize()
     {
+      Status = BackgroundTaskStatus.Starting;
       var progress = new Progress<long>(myTaskNum => { ProgressCounter = myTaskNum; });
       logger.LogDebug($"Starting new task for group {groupKey} ");
       runningTask = Task.Run(async () =>
@@ -50,6 +50,7 @@ namespace Common
 
         try
         {
+          Status = BackgroundTaskStatus.Started;
           if (serviceProvider == null)
           {
             await action(groupCancellationSource.Token, progress, null);
@@ -60,8 +61,10 @@ namespace Common
             await action(groupCancellationSource.Token, progress, serviceScope.ServiceProvider);
           }
           logger.LogDebug($"Starting for group {groupKey} ended without exceptions");
+          Status = BackgroundTaskStatus.Finished;
+          return;
         }
-        catch(OperationCanceledException)
+        catch (OperationCanceledException)
         {
           // Just rethrow OperationCanceledException and abort execution no need do anything else here
           throw;
@@ -71,6 +74,7 @@ namespace Common
           // Catch exceptions to prevent host from crashing
           logger.LogError($"Executing tasks group {groupKey} threw an exception " + ex);
         }
+        Status = BackgroundTaskStatus.FinishedWithError;
       }, groupCancellationSource.Token);
     }
 
@@ -102,6 +106,7 @@ namespace Common
     /// </summary>
     public async Task CancelTaskAsync() 
     {
+      Status = BackgroundTaskStatus.Cancelling;
       logger.LogDebug($"Requesting cancel for group {groupKey}");
 
       lock (objLock)
@@ -129,6 +134,7 @@ namespace Common
           groupCancellationSource?.Dispose();
           groupCancellationSource = null;
         }
+        Status = BackgroundTaskStatus.Cancelled;
       }
     }
   }

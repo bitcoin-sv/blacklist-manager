@@ -12,7 +12,6 @@ namespace BlacklistManager.Domain.Models
     public string Remarks { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdateAt { get; set; }
+    public string ReplacedBy { get; set; }
   }
-
-
 }

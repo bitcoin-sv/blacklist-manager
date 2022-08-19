@@ -7,6 +7,7 @@ using System.Net;
 using System.Threading.Tasks;
 using BlacklistManager.API.Rest.ViewModels;
 using BlacklistManager.Domain.Actions;
+using Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,12 +18,12 @@ namespace BlacklistManager.API.Rest.Controllers
   [Authorize]
   public class LegalEntityEndpointController : ControllerBase
   {
-    private readonly IDomainAction domainAction;
+    private readonly ILegalEndpoints _legalEndpoints;
 
     public LegalEntityEndpointController(
-      IDomainAction domainAction)
+      ILegalEndpoints legalEndpoints)
     {
-      this.domainAction = domainAction ?? throw new ArgumentNullException(nameof(domainAction));
+      _legalEndpoints = legalEndpoints ?? throw new ArgumentNullException(nameof(legalEndpoints));
     }
 
     [HttpPost]
@@ -34,7 +35,7 @@ namespace BlacklistManager.API.Rest.Controllers
         problemDetail.Title = "The 'baseUrl' parameter must not end with /";
         return BadRequest(problemDetail);
       }
-      var created = await domainAction.CreateLegalEntityEndpointAsync(data.BaseUrl, data.APIKey);
+      var created = await _legalEndpoints.CreateAsync(data.BaseUrl, data.APIKey);
 
       if (created == null)
       {
@@ -44,7 +45,7 @@ namespace BlacklistManager.API.Rest.Controllers
       }
 
       return CreatedAtAction(
-        "Get",
+        Consts.HttpMethodNameGET,
         new { id = created.LegalEntityEndpointId },
         new LegalEntityEndpointViewModelGet(created));
     }
@@ -52,7 +53,7 @@ namespace BlacklistManager.API.Rest.Controllers
     [HttpPut("{id}")]
     public async Task<IActionResult> PutAsync([FromRoute] int id, LegalEntityEndpointViewModelPut data)
     {
-      if (!await domainAction.UpdateLegalEntityEndpointAsync(id, data.BaseUrl, data.APIKey))
+      if (!await _legalEndpoints.UpdateAsync(id, data.BaseUrl, data.APIKey))
       {
         return NotFound();
       }
@@ -62,7 +63,7 @@ namespace BlacklistManager.API.Rest.Controllers
     [HttpGet("{id}")]
     public async Task<ActionResult<LegalEntityEndpointViewModelGet>> GetAsync(int id)
     {
-      var result = await domainAction.GetLegalEntityEndpointAsync(id);
+      var result = await _legalEndpoints.GetAsync(id);
       if (result == null)
       {
         return NotFound();
@@ -74,28 +75,28 @@ namespace BlacklistManager.API.Rest.Controllers
     [HttpGet]
     public async Task<ActionResult<IEnumerable<LegalEntityEndpointViewModelGet>>> GetAsync()
     {
-      var result = await domainAction.GetLegalEntityEndpointAsync();
+      var result = await _legalEndpoints.GetAsync();
       return Ok(result.Select(x => new LegalEntityEndpointViewModelGet(x)));
     }
 
     [HttpPost("{id}/disable")]
     public async Task<IActionResult> DisableAsync(int id)
     {
-      await domainAction.DisableLegalEntityEndpointAsync(id);
+      await _legalEndpoints.DisableAsync(id);
       return NoContent();
     }
 
     [HttpPost("{id}/enable")]
     public async Task<IActionResult> EnableAsync(int id)
     {
-      await domainAction.EnableLegalEntityEndpointAsync(id);
+      await _legalEndpoints.EnableAsync(id);
       return NoContent();
     }
 
     [HttpPost("{id}/reset")]
     public async Task<IActionResult> ResetAsync(int id)
     {
-      await domainAction.ResetLegalEntityEndpointAsync(id);
+      await _legalEndpoints.ResetAsync(id);
       return NoContent();
     }
   }

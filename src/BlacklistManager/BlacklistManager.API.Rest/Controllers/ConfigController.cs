@@ -1,8 +1,10 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
 using BlacklistManager.API.Rest.ViewModels;
+using BlacklistManager.Domain.Actions;
 using BlacklistManager.Domain.Models;
 using BlacklistManager.Domain.Repositories;
+using Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
@@ -18,18 +20,18 @@ namespace BlacklistManager.API.Rest.Controllers
   [Authorize]
   public class ConfigController : ControllerBase
   {
-    private readonly IConfigurationParamRepository configParamRepository;
+    private readonly IConfigurationParamRepository _configParamRepository;
 
     public ConfigController(
       IConfigurationParamRepository configParamRepository)
     {
-      this.configParamRepository = configParamRepository ?? throw new ArgumentNullException(nameof(configParamRepository));
+      this._configParamRepository = configParamRepository ?? throw new ArgumentNullException(nameof(configParamRepository));
     }
 
     [HttpPost]
     public async Task<ActionResult<ConfigurationParamViewModel>> PostAsync(ConfigurationParamViewModel data)
     {
-      var created = await configParamRepository.InsertAsync(new ConfigurationParam(data.Key, data.Value));
+      var created = await _configParamRepository.InsertAsync(new ConfigurationParam(data.Key, data.Value));
 
       if (created == null)
       {
@@ -40,7 +42,7 @@ namespace BlacklistManager.API.Rest.Controllers
       }
 
       return CreatedAtAction(
-        "Get",
+        Consts.HttpMethodNameGET,
         new { paramKey = data.Key},
         new ConfigurationParamViewModel(created));
     }
@@ -55,7 +57,7 @@ namespace BlacklistManager.API.Rest.Controllers
         return BadRequest(problemDetail);
       }
 
-      if (!await configParamRepository.UpdateAsync(new ConfigurationParam(data.Key, data.Value)))
+      if (!await _configParamRepository.UpdateAsync(new ConfigurationParam(data.Key, data.Value)))
       {
         return NotFound();
       }
@@ -65,7 +67,7 @@ namespace BlacklistManager.API.Rest.Controllers
     [HttpGet("{paramKey}")]
     public async Task<ActionResult<ConfigurationParamViewModel>> GetAsync(string paramKey)
     {
-      var result = await configParamRepository.GetAsync(new ConfigurationParam(paramKey, null));
+      var result = await _configParamRepository.GetAsync(new ConfigurationParam(paramKey, null));
       if (result == null)
       {
         return NotFound();
@@ -77,14 +79,14 @@ namespace BlacklistManager.API.Rest.Controllers
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ConfigurationParamViewModel>>> GetAsync()
     {
-      var result = await configParamRepository.GetAsync();
+      var result = await _configParamRepository.GetAsync();
       return Ok(result.Select(x => new ConfigurationParamViewModel(x)));
     }
 
     [HttpDelete("{paramKey}")]
     public async Task<IActionResult> DeleteAsync(string paramKey)
     {
-      await configParamRepository.DeleteAsync(new ConfigurationParam(paramKey, null));
+      await _configParamRepository.DeleteAsync(new ConfigurationParam(paramKey, null));
       return NoContent();
     }
   }

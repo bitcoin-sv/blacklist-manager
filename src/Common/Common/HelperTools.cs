@@ -8,15 +8,16 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Linq;
+using Common.BitcoinRpcClient;
+using Npgsql;
 
 namespace Common
 {
-  public class HelperTools
+  public static class HelperTools
   {
     const int BufferChunkSize = 1024 * 1024;
     public static async Task<byte[]> HexStringToByteArrayAsync(Stream stream)
@@ -39,16 +40,6 @@ namespace Common
       while (!strReader.EndOfStream);
 
       return outputBuffer.ToArray();
-    }
-
-    public static byte[] ConvertToByte(object obj)
-    {
-      BinaryFormatter bf = new BinaryFormatter();
-      using (MemoryStream ms = new MemoryStream())
-      {
-        bf.Serialize(ms, obj);
-        return ms.ToArray();
-      }
     }
 
     // https://stackoverflow.com/questions/311165/how-do-you-convert-a-byte-array-to-a-hexadecimal-string-and-vice-versa/26304129#26304129
@@ -75,6 +66,18 @@ namespace Common
         c[i * 2 + 1] = (char)(87 + b + (((b - 10) >> 31) & -39));
       }
       return new string(c);
+    }
+
+    public static Block ParseByteStreamToBlock(RPCBitcoinStreamReader streamReader)
+    {
+      // Create or own MemoryStream, so that we support bigger blocks
+      BitcoinStream s = new BitcoinStream(streamReader, false);
+      s.MaxArraySize = unchecked((int)uint.MaxValue); // NBitcoin internally casts to uint when comparing
+
+      var block = Consensus.Main.ConsensusFactory.CreateBlock();
+      block.ReadWrite(s);
+      streamReader.Close();
+      return block;
     }
 
     public static string ScriptPubKeyHexToHash(string hex)
@@ -136,7 +139,7 @@ namespace Common
       }
     }
 
-    public static string JSONSerializeNewtonsoft(object value, bool writeIndented)
+    public static string JSONSerializeNewtonsoft(object value)
     {
       DefaultContractResolver contractResolver = new DefaultContractResolver
       {
@@ -147,7 +150,7 @@ namespace Common
         new JsonSerializerSettings
         {
           ContractResolver = contractResolver,
-          Formatting = writeIndented ? Formatting.Indented : Formatting.None,
+          Formatting = Formatting.Indented,
           NullValueHandling = NullValueHandling.Ignore,
           Converters = new List<JsonConverter> { new DocumentTypeConverterNewtonsoft(), new PurposeTypeConverterNewtonsoft() }
         };
@@ -166,6 +169,7 @@ namespace Common
         new JsonSerializerSettings
         {
           ContractResolver = contractResolver,
+          Formatting = Formatting.Indented,
           NullValueHandling = NullValueHandling.Ignore,
           Converters = new List<JsonConverter> { new DocumentTypeConverterNewtonsoft(), new PurposeTypeConverterNewtonsoft() }
         };
@@ -253,6 +257,26 @@ namespace Common
     public static string ConvertFromHexToBase64(string hexString)
     {
       return Convert.ToBase64String(HexStringToByteArray(hexString));
+    }
+
+    public static void ShuffleArray<T>(T[] array)
+    {
+      int n = array.Length;
+      while (n > 1)
+      {
+        int i = System.Security.Cryptography.RandomNumberGenerator.GetInt32(0, n--);
+        T temp = array[n];
+        array[n] = array[i];
+        array[i] = temp;
+      }
+    }
+
+    public static async Task<NpgsqlConnection> OpenNpgSQLConnectionAsync(string connectionString)
+    {
+      var connection = new NpgsqlConnection(connectionString);
+      await RetryUtils.ExecuteWithRetriesAsync(3, null, () => connection.OpenAsync());
+
+      return connection;
     }
   }
 }

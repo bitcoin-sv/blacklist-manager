@@ -2,8 +2,11 @@
 
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Threading.Tasks;
 using BlacklistManager.Domain.Models;
+using Common.Bitcoin;
+using NBitcoin;
 
 namespace BlacklistManager.Domain.Repositories
 {
@@ -19,7 +22,7 @@ namespace BlacklistManager.Domain.Repositories
     /// if funds are already inserted by other court order, they are not duplicated
     /// </summary>
     /// <param name="order"></param>
-    public Task<bool> InsertCourtOrderAsync(CourtOrder courtOrder, string signedCourtOrder, int? legalEntityEndpointId);
+    public Task<long?> InsertCourtOrderAsync(CourtOrder courtOrder, string signedCourtOrder, int? legalEntityEndpointId, string signedByKey);
 
     /// <summary>
     /// Set the status for given court order
@@ -34,7 +37,7 @@ namespace BlacklistManager.Domain.Repositories
     /// <returns>fund state list for each node chronologically ordered by fundStateId (state change date) </returns>
     public Task<IEnumerable<FundStateToPropagate>> GetFundStateToPropagateAsync();
 
-    public void InsertFundStateNode(IEnumerable<FundStatePropagated> fundStateNodeList);
+    public Task InsertFundStateNodeAsync(IEnumerable<FundStatePropagated> fundStateNodeList);
 
     /// <summary>
     /// Get court orders 
@@ -42,19 +45,19 @@ namespace BlacklistManager.Domain.Repositories
     /// <param name="courtOrderhash">optional. When null, all court orders are returned.</param>
     /// <param name="includeFunds">When true funds are returned too</param>
     /// <returns></returns>
-    public Task<IEnumerable<CourtOrder>> GetCourtOrdersAsync(string courtOrderhash, bool includeFunds);    
-    
+    public Task<IEnumerable<CourtOrder>> GetCourtOrdersAsync(string courtOrderhash, bool includeFunds);
+
     /// <summary>
     /// Get imported court orders that are not yet processed
     /// </summary>
     /// <returns>returns list of court order hashes</returns>
-    public Task<IEnumerable<string>> GetCourtOrdersToActivateAsync();        
-    
+    public Task<IEnumerable<string>> GetCourtOrdersToActivateAsync();
+
     /// <summary>
-    /// Get courtorders that need to be submited to legal entities for acceptances
+    /// Get court orders that need to be submitted to legal entities for acceptances
     /// </summary>
     /// <returns>list of court orders for which acceptances must be sent out</returns>
-    public Task<IEnumerable<CourtOrderWithAcceptance>> GetCourtOrdersToSendAcceptancesAsync();
+    public Task<IEnumerable<CourtOrderWithAcceptance>> GetCourtOrdersToSendAcceptancesAsync(int maxRetryCount);
 
     /// <summary>
     /// Updates status of court order acceptances 
@@ -65,16 +68,54 @@ namespace BlacklistManager.Domain.Repositories
     /// <param name="coAcceptanceSubmitedAt"></param>
     /// <param name="error"></param>
     /// <returns></returns>
-    public Task<int> SetCourtOrderAcceptanceStatusAsync(int courtOrderAcceptanceId, string signedCOAcceptance, DateTime? coAcceptanceSubmitedAt, string error);
+    public Task<int> SetCourtOrderAcceptanceStatusAsync(int courtOrderAcceptanceId, string signedCOAcceptance, DateTime? coAcceptanceSubmitedAt, string error, int? retryCount);
 
     /// <summary>
     /// Get pending consensus activations
     /// </summary>
-    public Task<IEnumerable<PendingConsensusActivation>> GetPendingConsensusActivationsAsync();
+    public Task<IEnumerable<PendingConsensusActivation>> GetPendingConsensusActivationsAsync(int maxRetryCount, int rangeToCheck);
 
-    public Task InsertConsensusActivationAsync(ConsensusActivation consensusActivation, long internalCourtOrderId, int legalEntityEndpointId, bool isCaValid);
+    public Task InsertConsensusActivationAsync(ConsensusActivation consensusActivation, long internalCourtOrderId, int legalEntityEndpointId, bool isCaValid, Network network, int? retryCount);
     public Task UpdateLegalEntityEndpointErrorAsync(int legalEntityEndpointId, string error);
 
-    public IEnumerable<Fund> GetFunds();
+    public Task<IEnumerable<Fund>> GetFundsAsync();
+
+    public Task<IEnumerable<CourtOrder>> GetCourtOrdersWaitingForConfiscationAsync(int courtOrderStatus, long minEAT, long maxEAT);
+
+    public Task<IEnumerable<CourtOrder>> GetCourtOrderForConfiscationTxWhiteListAsync();
+
+    public Task<IEnumerable<TransactionToSend>> GetConfiscationTransactionsForWhiteListAsync(string courtOrderHash, int nodeId);
+
+    public Task<IEnumerable<TransactionToSend>> GetConfiscationTransactionsAsync(int minEAT, int heightForSubmit, bool forceResend);
+
+    public Task SetTransactionErrorsAsync(SendRawTransactionsResult[] transactionsResults);
+
+    public Task<bool> InsertConfiscationTransactionsAsync(long internalCourtOrderId, IReadOnlyCollection<(string TxId, int? EnforceAtHeight, byte[] Body)> confiscationTransactions);
+
+    public Task<IEnumerable<TransactionStatus>> GetConfiscationTransactionsStatusAsync(string courtOrderHash);
+
+    public Task<IEnumerable<CourtOrderAcceptance>> GetCourtOrderAcceptancesAsync(long internalCourtOrderId, IDbTransaction transaction = null);
+
+    public Task InsertValidationErrorsAsync(int legalEntityEndpointId, string courtOrderhash, string errorData, string lastError);
+
+    public Task<IEnumerable<ValidationError>> GetValidationErrorsAsync(int maxRetryCount);
+
+    public Task MarkValidationErrorSuccessfulAsync(int legalEntityEndpointId, string courtOrderhash);
+
+    public Task<IEnumerable<CourtOrderQuery>> QueryCourtOrdersAsync(string courtOrderHash, bool includeFunds);
+
+    public Task<FundQuery> QueryFundByTxOutAsync(string txId, long vout);
+
+    public Task InsertWhitelistedNodeInfoAsync(string courtOrderHash, int nodeId);
+
+    public Task CancelConfiscationOrderAsync(string courtOrderHash);
+
+    public Task<(string ActivationHash, int EnforceAtHeight)[]> GetUnprocessedConsensusActivationsAsync();
+
+    public Task<IEnumerable<ValidationError>> GetFailedCourtOrdersAsync();
+
+    public Task MarkCourtOrderSuccessfullyProccesedAsync(int legalEntityEndpointId, string courtOrderhash);
+
+    public Task<int> GetNumberOfSignedDocumentsAsync(string signedByKey);
   }
 }

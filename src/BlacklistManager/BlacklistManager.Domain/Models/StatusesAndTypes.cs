@@ -2,12 +2,6 @@
 
 namespace BlacklistManager.Domain.Models
 {
-  public enum CourtOrderType
-  {
-    Freeze = 1,
-    Unfreeze = 2
-  }
-
   public enum CourtOrderStatus
   {
     // Freeze order:
@@ -18,7 +12,12 @@ namespace BlacklistManager.Domain.Models
     UnfreezeNoConsensusYet = 200,
     UnfreezeConsensus = 201,
 
-    Imported = 199
+    Imported = 199,
+
+    ConfiscationPolicy = 300,
+    ConfiscationConsensus = 301,
+    ConfiscationConsensusWhitelisted = 302,
+    ConfiscationCancelled = 303
   }
 
   public enum FundStatus

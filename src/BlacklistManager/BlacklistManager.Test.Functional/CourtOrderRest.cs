@@ -20,16 +20,16 @@ namespace BlacklistManager.Test.Functional
     }
 
     [TestCleanup]
-    public void TestCleanup()
+    public async Task TestCleanupAsync()
     {
-      base.Cleanup();
+      await base.CleanupAsync();
     }
 
     [TestMethod]
     public async Task QueryCourtOrders_WrongId_ShouldReturn404Async()
     {
       //act
-      var response = await client.GetAsync(BlacklistManagerServer.Get.GetCourtOrder("XYZ", false));
+      var response = await Client.GetAsync(BlacklistManagerServer.Get.GetCourtOrder("XYZ", false));
 
       //assert
       Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
@@ -42,25 +42,25 @@ namespace BlacklistManager.Test.Functional
       // see base.Initialize()
 
       // freeze for A,9 and B,10 
-      var order1Hash = await Utils.SubmitFreezeOrderAsync(client,
-        ("A", 9),
-        ("B", 10));
-      await backgroundJobs.WaitForCourtOrderProcessingAsync();
+      var order1Hash = await Utils.SubmitFreezeOrderAsync(Client,
+        (2000, "A", 9),
+        (1000, "B", 10));
+      await BackgroundJobs.WaitForCourtOrderProcessingAsync();
 
-      var courtOrder = await Utils.QueryCourtOrderAsync(client, order1Hash, false);
+      var courtOrder = await Utils.QueryCourtOrderAsync(Client, order1Hash, false);
       Assert.AreEqual(order1Hash, courtOrder.CourtOrderHash);
       Assert.AreEqual(Common.SmartEnums.DocumentType.FreezeOrder, courtOrder.DocumentType);
       Assert.AreEqual("somecourtorderid", courtOrder.CourtOrderId);
       Assert.AreEqual(0, courtOrder.Funds.Count);
 
       // freeze for A,9 and C,11 
-      var order2Hash = await Utils.SubmitFreezeOrderAsync(client,
-        ("A", 9),
-        ("C", 11));
-      await backgroundJobs.WaitForCourtOrderProcessingAsync();
+      var order2Hash = await Utils.SubmitFreezeOrderAsync(Client,
+        (1000, "A", 9),
+        (3000, "C", 11));
+      await BackgroundJobs.WaitForCourtOrderProcessingAsync();
 
       // assert data
-      var courtOrders = await Utils.QueryCourtOrdersAsync(client, false);
+      var courtOrders = await Utils.QueryCourtOrdersAsync(Client, false);
       
       Assert.AreEqual(2, courtOrders.Count());
       var courtOrder1 = courtOrders.First(c => c.CourtOrderHash == order1Hash);
@@ -78,11 +78,11 @@ namespace BlacklistManager.Test.Functional
       Assert.AreEqual(0, courtOrder2.Funds.Count());
 
       // unfreeze for order1
-      var unfreezeOrder1Hash = await Utils.SubmitUnfreezeOrderAsync(client, order1Hash, new (string TxId, long vOut)[] { });
-      await backgroundJobs.WaitForCourtOrderProcessingAsync();
+      var unfreezeOrder1Hash = await Utils.SubmitUnfreezeOrderAsync(Client, order1Hash, new (long, string TxId, long vOut)[] { });
+      await BackgroundJobs.WaitForCourtOrderProcessingAsync();
 
       // assert data
-      courtOrders = await Utils.QueryCourtOrdersAsync(client, true);
+      courtOrders = await Utils.QueryCourtOrdersAsync(Client, true);
 
       Assert.AreEqual(3, courtOrders.Count());
       courtOrder1 = courtOrders.First(c => c.CourtOrderHash == order1Hash);
@@ -92,7 +92,7 @@ namespace BlacklistManager.Test.Functional
       Assert.AreEqual(unfreezeOrder1Hash, string.Join(",", courtOrder1.RelatedOrders));
       Assert.AreEqual(2, courtOrder1.Funds.Count());
       var fundA = courtOrder1.Funds.First(f => f.TxOut.TxId == "a");
-      AssertExtension.AreEqual($"a,9|{order1Hash},{unfreezeOrder1Hash},,;{order2Hash},,,", fundA);
+      AssertExtension.AreEqual($"a,9|{order2Hash},,,;{order1Hash},{unfreezeOrder1Hash},,", fundA);
       var fundB = courtOrder1.Funds.First(f => f.TxOut.TxId == "b");
       AssertExtension.AreEqual($"b,10|{order1Hash},{unfreezeOrder1Hash},,", fundB);
 
@@ -103,7 +103,7 @@ namespace BlacklistManager.Test.Functional
       Assert.AreEqual(0, courtOrder2.RelatedOrders.Count());
       Assert.AreEqual(2, courtOrder2.Funds.Count());
       fundA = courtOrder2.Funds.First(f => f.TxOut.TxId == "a");
-      AssertExtension.AreEqual($"a,9|{order1Hash},{unfreezeOrder1Hash},,;{order2Hash},,,", fundA);
+      AssertExtension.AreEqual($"a,9|{order2Hash},,,;{order1Hash},{unfreezeOrder1Hash},,", fundA);
       var fundC = courtOrder2.Funds.First(f => f.TxOut.TxId == "c");
       AssertExtension.AreEqual($"c,11|{order2Hash},,,", fundC);
 
@@ -114,20 +114,20 @@ namespace BlacklistManager.Test.Functional
       Assert.AreEqual(order1Hash, string.Join(",", unfreezeCourtOrder1.RelatedOrders));
       Assert.AreEqual(2, unfreezeCourtOrder1.Funds.Count());
       fundA = unfreezeCourtOrder1.Funds.First(f => f.TxOut.TxId == "a");
-      AssertExtension.AreEqual($"a,9|{order1Hash},{unfreezeOrder1Hash},,;{order2Hash},,,", fundA);
+      AssertExtension.AreEqual($"a,9|{order2Hash},,,;{order1Hash},{unfreezeOrder1Hash},,", fundA);
       fundB = unfreezeCourtOrder1.Funds.First(f => f.TxOut.TxId == "b");
       AssertExtension.AreEqual($"b,10|{order1Hash},{unfreezeOrder1Hash},,", fundB);
 
       // consensus for freeze order1
-      await domainLogic.SetCourtOrderStatusAsync(order1Hash, CourtOrderStatus.FreezeConsensus, 100);
-      await backgroundJobs.WaitForCourtOrderProcessingAsync();
+      await base.CourtOrders.SetCourtOrderStatusAsync(order1Hash, CourtOrderStatus.FreezeConsensus, 100);
+      await BackgroundJobs.WaitForCourtOrderProcessingAsync();
 
       // consensus for unfreeze order1
-      await domainLogic.SetCourtOrderStatusAsync(unfreezeOrder1Hash, CourtOrderStatus.UnfreezeConsensus, 200);
-      await backgroundJobs.WaitForCourtOrderProcessingAsync();
+      await base.CourtOrders.SetCourtOrderStatusAsync(unfreezeOrder1Hash, CourtOrderStatus.UnfreezeConsensus, 200);
+      await BackgroundJobs.WaitForCourtOrderProcessingAsync();
 
       // assert data
-      courtOrders = await Utils.QueryCourtOrdersAsync(client, true);
+      courtOrders = await Utils.QueryCourtOrdersAsync(Client, true);
 
       Assert.AreEqual(3, courtOrders.Count());
       courtOrder1 = courtOrders.First(c => c.CourtOrderHash == order1Hash);
@@ -137,7 +137,7 @@ namespace BlacklistManager.Test.Functional
       Assert.AreEqual(unfreezeOrder1Hash, string.Join(",", courtOrder1.RelatedOrders));
       Assert.AreEqual(2, courtOrder1.Funds.Count());
       fundA = courtOrder1.Funds.First(f => f.TxOut.TxId == "a");
-      AssertExtension.AreEqual($"a,9|{order1Hash},{unfreezeOrder1Hash},100,200;{order2Hash},,,", fundA);
+      AssertExtension.AreEqual($"a,9|{order2Hash},,,;{order1Hash},{unfreezeOrder1Hash},100,200", fundA);
       fundB = courtOrder1.Funds.First(f => f.TxOut.TxId == "b");
       AssertExtension.AreEqual($"b,10|{order1Hash},{unfreezeOrder1Hash},100,200", fundB);
 
@@ -148,7 +148,7 @@ namespace BlacklistManager.Test.Functional
       Assert.AreEqual(0, courtOrder2.RelatedOrders.Count());
       Assert.AreEqual(2, courtOrder2.Funds.Count());
       fundA = courtOrder2.Funds.First(f => f.TxOut.TxId == "a");
-      AssertExtension.AreEqual($"a,9|{order1Hash},{unfreezeOrder1Hash},100,200;{order2Hash},,,", fundA);
+      AssertExtension.AreEqual($"a,9|{order2Hash},,,;{order1Hash},{unfreezeOrder1Hash},100,200", fundA);
       fundC = courtOrder2.Funds.First(f => f.TxOut.TxId == "c");
       AssertExtension.AreEqual($"c,11|{order2Hash},,,", fundC);
 
@@ -159,7 +159,7 @@ namespace BlacklistManager.Test.Functional
       Assert.AreEqual(order1Hash, string.Join(",", unfreezeCourtOrder1.RelatedOrders));
       Assert.AreEqual(2, unfreezeCourtOrder1.Funds.Count());
       fundA = unfreezeCourtOrder1.Funds.First(f => f.TxOut.TxId == "a");
-      AssertExtension.AreEqual($"a,9|{order1Hash},{unfreezeOrder1Hash},100,200;{order2Hash},,,", fundA);
+      AssertExtension.AreEqual($"a,9|{order2Hash},,,;{order1Hash},{unfreezeOrder1Hash},100,200", fundA);
       fundB = unfreezeCourtOrder1.Funds.First(f => f.TxOut.TxId == "b");
       AssertExtension.AreEqual($"b,10|{order1Hash},{unfreezeOrder1Hash},100,200", fundB);
     }

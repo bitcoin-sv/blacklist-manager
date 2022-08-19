@@ -32,10 +32,10 @@ namespace BlacklistManager.Test.Functional
     }
 
     [TestCleanup]
-    public void TestCleanup()
+    public async Task TestCleanupAsync()
     {
-      base.Cleanup();
-    }   
+      await base.CleanupAsync();
+    }
 
     [TestMethod]
     public async Task ProcessCourtOrder_InvalidCourtOrder_NoFunds_ShouldReturnBadRequestAsync()
@@ -46,17 +46,17 @@ namespace BlacklistManager.Test.Functional
       //act
       var reqContent = Utils.CreateProcessCourtOrderRequestContent(
         DocumentType.FreezeOrder,
-        new List<BMAPI.TxOut>(),
+        new List<(long, BMAPI.TxOut)>(),
         out string courtOrderHash);
 
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
+      var response = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert
       Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
 
       var pd = JsonSerializer.Deserialize<ProblemDetails>(responseContent);
-      Assert.IsTrue(pd.Title.Contains("Non empty 'funds' is required"), "Missing correct validation message");
+      Assert.IsTrue(pd.Detail.Contains("Non empty 'funds' is required"), "Missing correct validation message");
     }
 
     [TestMethod]
@@ -79,17 +79,17 @@ namespace BlacklistManager.Test.Functional
       //  out string courtOrderHash);
       #endregion
 
-      var payload = "{\"courtOrderHash\":null,\"documentType\":\"freezeOrder\",\"validTo\":\"2020-05-11T00:12:11+02:00\",\"validFrom\":null,\"funds\":[{\"txOut\":{\"txId\":\"A\",\"vout\":1,\"status\":null}}],\"courtOrderId\":\"somecourtorderid\",\"freezeCourtOrderId\":null,\"freezeCourtOrderHash\":null}";
+      var payload = "{\"blockchain\":\"BSV-RegTest\", \"courtOrderHash\":null,\"documentType\":\"freezeOrder\",\"validTo\":\"2020-05-11T00:12:11+02:00\",\"validFrom\":null,\"funds\":[{\"txOut\":{\"txId\":\"A\",\"vout\":1,\"status\":null}}],\"courtOrderId\":\"somecourtorderid\",\"freezeCourtOrderId\":null,\"freezeCourtOrderHash\":null}";
       string signed = SignatureTools.CreateJSONWithBitcoinSignature(payload, Utils.PrivateKey, NBitcoin.Network.RegTest, true);
 
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, Utils.JsonToStringContent(signed));
+      var response = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, Utils.JsonToStringContent(signed));
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert
       Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
 
       var pd = JsonSerializer.Deserialize<ProblemDetails>(responseContent);
-      Assert.IsTrue(pd.Title.Contains("'validTo' must be UTC time"), "Missing correct validation message");
+      Assert.IsTrue(pd.Detail.Contains("'validTo' must be UTC time"), "Missing correct validation message");
     }
 
     [TestMethod]
@@ -101,19 +101,19 @@ namespace BlacklistManager.Test.Functional
       //act      
       var reqContent = Utils.CreateProcessCourtOrderRequestContent(
         DocumentType.FreezeOrder,
-        new List<BMAPI.TxOut>() { new BMAPI.TxOut("A", 1) },
+        new List<(long, BMAPI.TxOut)>() { (1000, new BMAPI.TxOut("A", 1)) },
         DateTime.UtcNow.AddSeconds(1),
         DateTime.UtcNow,
         out string _);
 
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
+      var response = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert
       Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
 
       var pd = JsonSerializer.Deserialize<ProblemDetails>(responseContent);
-      Assert.IsTrue(pd.Title.Contains("'validFrom' is greater then 'validTo'"), "Missing correct validation message");
+      Assert.IsTrue(pd.Detail.Contains("'validFrom' is greater then 'validTo'"), "Missing correct validation message");
     }
 
     [TestMethod]
@@ -125,19 +125,19 @@ namespace BlacklistManager.Test.Functional
       //act      
       var reqContent = Utils.CreateProcessCourtOrderRequestContent(
         DocumentType.FreezeOrder,
-        new List<BMAPI.TxOut>() { new BMAPI.TxOut("A", null) },
+        new List<(long, BMAPI.TxOut)>() { (1000, new BMAPI.TxOut("A", null)) },
         DateTime.UtcNow,
         DateTime.UtcNow,
         out string courtOrderHash);
 
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
+      var response = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert
       Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
 
       var pd = JsonSerializer.Deserialize<ProblemDetails>(responseContent);
-      Assert.IsTrue(pd.Title.Contains("'vout' is required"), "Missing correct validation message");
+      Assert.IsTrue(pd.Detail.Contains("'vout' is required"), "Missing correct validation message");
     }
 
     [TestMethod]
@@ -153,10 +153,10 @@ namespace BlacklistManager.Test.Functional
         Signature = "304402201a271fa1807c3e010196d7b1f249fde5dea007c68bb44ec005a400a2bedde32502207c4b225ead678847cc52818708ffdc4579b5703a2f6e03200ad629813c887cdf"
       };
 
-      var content = JsonSerializer.Serialize(jsonEnvelope);
+      var content = jsonEnvelope.ToJson();
 
       //act
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, Utils.JsonToStringContent(content));
+      var response = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, Utils.JsonToStringContent(content));
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert
@@ -170,23 +170,23 @@ namespace BlacklistManager.Test.Functional
     [TestMethod]
     public async Task ProcessCourtOrder_NoMimetype_ShouldReturnBadRequestAsync()
     {
-      var coJSON = JsonSerializer.Serialize(new CourtOrderViewModelCreate(), SerializerOptions.SerializeOptions);
+      var coJSON = JsonSerializer.Serialize(new CourtOrderViewModelCreate(), SerializerOptions.SerializeOptionsNoPrettyPrint);
       var jsonSig = SignatureTools.CreateJSONWithBitcoinSignature(coJSON, Utils.PrivateKey, NBitcoin.Network.RegTest);
 
-      var sig = JsonSerializer.Deserialize<JsonEnvelope>(jsonSig);
+      var sig = JsonEnvelope.ToObject(jsonSig);
       sig.Mimetype = null;
 
-      var content = JsonSerializer.Serialize(sig);
+      var content = sig.ToJson();
 
       //act
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, Utils.JsonToStringContent(content));
+      var response = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, Utils.JsonToStringContent(content));
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert
       Assert.AreEqual(HttpStatusCode.BadRequest, response.StatusCode);
 
       var vpd = JsonSerializer.Deserialize<ValidationProblemDetails>(responseContent);
-      Assert.AreEqual(5, vpd.Errors.Count());
+      Assert.AreEqual(1, vpd.Errors.Count());
       Assert.IsTrue(vpd.Errors.Any(x => x.Key == "Mimetype"));
     }
 
@@ -203,10 +203,10 @@ namespace BlacklistManager.Test.Functional
         Signature = "304402201a271fa1807c3e010196d7b1f249fde5dea007c68bb44ec005a400a2bedde32502207c4b225ead678847cc52818708ffdc4579b5703a2f6e03200ad629813c887cdf"
       };
 
-      var content = JsonSerializer.Serialize(jsonEnvelope);
+      var content = jsonEnvelope.ToJson();
 
       //act
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, Utils.JsonToStringContent(content));
+      var response = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, Utils.JsonToStringContent(content));
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert
@@ -223,13 +223,13 @@ namespace BlacklistManager.Test.Functional
       //act
       var reqContent = Utils.CreateProcessCourtOrderRequestContent(
         DocumentType.FreezeOrder,
-        new List<BMAPI.TxOut>() { new BMAPI.TxOut("A", 1) },
+        new List<(long, BMAPI.TxOut)>() { (1000, new BMAPI.TxOut("A", 1)) },
         out string courtOrderHash);
 
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
+      var response = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
       var responseContent = await response.Content.ReadAsStringAsync();
 
-      var response2 = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
+      var response2 = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
       var responseContent2 = await response.Content.ReadAsStringAsync();
 
       //assert
@@ -247,12 +247,12 @@ namespace BlacklistManager.Test.Functional
         "mylittlehash",
         null,null,
         "somenotexistingcourtorderid", "somenotexistingcourtorderhash",
-        new List<BMAPI.TxOut>() {
-          new BMAPI.TxOut("A", 1) ,
-          new BMAPI.TxOut("C", 1) },
+        new List<(long, BMAPI.TxOut)>() {
+          (1000, new BMAPI.TxOut("A", 1)) ,
+          (1000, new BMAPI.TxOut("C", 1)) },
         out string courtOrderHash);
 
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
+      var response = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert
@@ -264,13 +264,13 @@ namespace BlacklistManager.Test.Functional
     public async Task ProcessCourtOrder_UnfreezeOrderUnreferencedFunds_ShouldReturnBadRequestAsync()
     {
       //arrange
-      var order1Hash = await Utils.SubmitFreezeOrderAsync(client,
-        ("A", 1),
-        ("B", 1));
+      var order1Hash = await Utils.SubmitFreezeOrderAsync(Client,
+        (1000, "A", 1),
+        (1000, "B", 1));
 
-      var order2Hash = await Utils.SubmitFreezeOrderAsync(client,
-        ("C", 1),
-        ("D", 1));
+      var order2Hash = await Utils.SubmitFreezeOrderAsync(Client,
+        (1000, "C", 1),
+        (1000, "D", 1));
 
       //act
       var reqContent = Utils.CreateProcessCourtOrderRequestContent(
@@ -278,12 +278,12 @@ namespace BlacklistManager.Test.Functional
         "somecourtorderid2",
         null,null,
         "somecourtorderid",order1Hash,
-        new List<BMAPI.TxOut>() {
-          new BMAPI.TxOut("A", 1) ,
-          new BMAPI.TxOut("C", 1) },
+        new List<(long, BMAPI.TxOut)>() {
+          (1000, new BMAPI.TxOut("A", 1)) ,
+          (1000, new BMAPI.TxOut("C", 1)) },
         out string courtOrderHash);
 
-      var response = await client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
+      var response = await Client.PostAsync(BlacklistManagerServer.Post.ProcessCourtOrder, reqContent);
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert

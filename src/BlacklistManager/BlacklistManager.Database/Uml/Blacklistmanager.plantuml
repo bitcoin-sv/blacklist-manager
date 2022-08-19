@@ -1,0 +1,235 @@
+@startuml  Blacklist manager DB
+
+skinparam backgroundColor #FFFFFE
+!define primary_key(x) <b>x</b>
+!define unique(x) <color:green>x</color>
+!define not_null(x) <u>x</u>
+
+hide empty members
+hide circle
+
+class ConfigurationParam{
+  primary_key(paramKey): string
+  paramValue: string
+}
+
+class ConfiscationTransaction{
+  primary_key(confiscationTransactionId): long
+  internalCourtOrderId: long
+  not_null(transactionId): hash
+  not_null(transactionBody): binary
+  enforceAtHeight: integer
+  submittedAtHeight: integer
+  lastErrorAtHeight: integer
+  lastErrorCode: integer
+  lastError: string
+  not_null(rewardTransaction): boolean
+}
+ConfiscationTransaction "1" -- "*" CourtOrder
+
+class ConsensusActivation{
+  primary_key(consensusActivationId): long
+  not_null(internalCourtOrderId): long
+  signedConsensusActivationJson: string
+  unique(consensusActivationHash): hash
+  not_null(enforceAtHeight): integer
+  not_null(signedDate): timestamp
+  not_null(signedByKey): hash
+}
+ConsensusActivation "1" -- "*" CourtOrder
+
+class ConsensusActivationLegalEntityEndpoint{
+  primary_key(consensusActivationId): long
+  primary_key(legalEntityEndpointId): integer
+  receivedAt: timestamp
+  lastErrorAt: timestamp
+  lastError: string
+  retryCount: integer
+}
+ConsensusActivationLegalEntityEndpoint "*" -- "1" ConsensusActivation
+ConsensusActivationLegalEntityEndpoint "*" -- "1" LegalEntityEndpoint
+
+class CourtOrder {
+   primary_key(internalCourtOderId): integer
+   not_null(courtOrderType): integer
+   not_null(courtOrderId) : string
+   freezeCourtOrderId: string
+   freezeCourtOrderHash: hash
+   freezeInternalCourtOrderId: integer
+   validFrom :timestamp
+   validTo :timestamp
+   unique(not_null(courtOrderHash)): hash
+   courtOrderStatus: integer
+   enforceAtHeight: integer
+   signedCourtOrderJson: string
+   destinationAddress: string
+   destinationAmount: long
+   signedByKey: hash
+   signedDate: timestamp
+}
+CourtOrder "1" -- "1" CourtOrder
+
+class CourtOrderAcceptance{
+  primary_key(courtOrderAcceptanceId): long
+  not_null(internalCourtOderId): long
+  legalEntityEndpointId: integer
+  signedCourtOrderAcceptanceJson:string
+  courtOrderReceivedAt: timestamp
+  courtOrderAcceptanceSubmittedAt: timestamp
+  lastError: string
+  retryCount: integer
+  lastErrorAt: timestamp
+}
+CourtOrderAcceptance "*" -- "1" CourtOrder
+CourtOrderAcceptance "*" -- "1" LegalEntityEndpoint
+
+class CourtOrderFund{
+  primary_key(fundId): integer
+  primary_key(internalCourtOderId): long
+}
+CourtOrderFund "*" -- "1" CourtOrder
+CourtOrderFund "*" -- "1" Fund
+
+class CourtOrderState{
+  primary_key(courtOrderStateId): long
+  not_null(internalCourtOderId): long
+  not_null(courtOrderStatus): integer
+  changedAt: timestamp
+}
+CourtOrderState "*" -- "1" CourtOrder
+
+class CourtOrderValidationError{
+  primary_key(legalEntityEndpointId): integer
+  primary_key(courtOrderHash): hash
+  errorData: string
+  submittedAt: timestamp
+  lastError: string
+  lastErrorAt: timestamp
+  retryCount: integer
+  successfullyProcessedAt: timestamp
+}
+CourtOrderValidationError "*" -- "1" LegalEntityEndpoint
+
+class DelegatedKey{
+  primary_key(delegatedKeyId): integer
+  unique(not_null(privateKey)): binary
+  not_null(publicKey): hash
+  not_null(delegationRequired): boolean
+  not_null(isActive): boolean
+  activatedAt: timestamp
+  not_null(createdAt): timestamp
+}
+
+class DelegatingKey{
+  primary_key(delegatedKeyId): integer
+  unique(publicKeyAddress): string
+  unique(publicKey): hash
+  dataToSign: string
+  signedDelegatedKeyJson: string
+  not_null(createdAt): timestamp
+  validatedAt: timestamp
+  delegatedKeyId: integer
+}
+DelegatingKey "*" -- "1" DelegatedKey
+
+class Fund{
+  primary_key(fundId): long
+  unique(txId): hash
+  unique(vout): long
+  not_null(fundStatus): integer
+  value: long
+  not_null(hasConfiscationOrder): boolean
+}
+
+class FundEnforceAtHeight{
+  primary_key(fundId): long
+  primary_key(internalCourtOderId): long
+  not_null(startEnforceAtHeight): integer
+  not_null(stopEnforceAtHeight): integer
+  not_null(hasUnfreezeOrder): boolean
+  not_null(hasConfiscationOrder): boolean
+}
+FundEnforceAtHeight "*" -- "1" Fund
+FundEnforceAtHeight "*" -- "1" CourtOrder
+
+class FundState{
+  primary_key(fundStateId): long
+  not_null(fundId): integer
+  fundStateIdPrevious: long
+  not_null(fundStatus): integer
+  fundStatusPrevious: integer
+  changedAt: timestamp
+}
+FundState "*" -- "1" Fund
+FundState "1" -- "1" FundState
+
+class FundStateEnforceAtHeight{
+  primary_key(fundStateId): long
+  primary_key(internalCourtOderId): long
+  not_null(startEnforceAtHeight): integer
+  not_null(stopEnforceAtHeight): integer
+  not_null(hasUnfreezeOrder): boolean
+}
+FundStateEnforceAtHeight "*" -- "1" CourtOrder
+FundStateEnforceAtHeight "*" -- "1" FundState
+
+class FundStateNode{
+  primary_key(fundStateId): long
+  primary_key(nodeId): integer
+  propagatedAt: timestamp
+}
+FundStateNode "*" -- "1" FundState
+FundStateNode "*" -- "1" Node
+
+class LegalEntityEndpoint{
+  primary_key(legalEntityEndpointId): integer
+  unique(not_null(baseUrl)): string
+  not_null(apiKey): string
+  not_null(createdAt): timestamp
+  validUntil: timestamp
+  lastContactedAt: timestamp
+  lastError: string
+  lastErrorAt: timestamp
+  courtOrderSyncToken: string
+  courtOrderAcceptanceSyncToken: string
+  courtOrderDeltaLink: string
+}
+
+class Node{
+  primary_key(nodeId): integer
+  unique(not_null(host)): string
+  unique(not_null(port)): integer
+  not_null(userName): string
+  not_null(password): string
+  remarks: string
+  not_null(nodeStatus): integer
+  lastError: string
+  lastErrorAt: timestamp
+}
+
+class NodeWhiteList{
+  primary_key(confiscationTransactionId): long
+  primary_key(nodeId): integer
+  submittedAt: timestamp
+}
+NodeWhiteList "*" -- "1" Node
+NodeWhiteList "*" -- "1" ConfiscationTransaction
+
+class TrustList{
+  primary_key(publicKey): hash
+  not_null(truste): boolean
+  not_null(createdAt): timestamp
+  updateAt: timestamp
+  remarks: string
+  replacedBy: hash
+}
+TrustList "1" -- "1" TrustList
+
+class Version{
+  primary_key(versionId): integer
+  unique(not_null(projectName)): string
+  not_null(updating): integer
+  not_null(creationDate): timestamp
+}
+
+@enduml

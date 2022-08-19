@@ -2,10 +2,8 @@
 
 using BlacklistManager.Domain.Models;
 using BlacklistManager.Domain.Repositories;
-using Common;
 using Dapper;
-using Npgsql;
-using System;
+using Microsoft.Extensions.Configuration;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -14,17 +12,16 @@ namespace BlacklistManager.Infrastructure.Repositories
 {
   public class ConfigurationParamRepositoryPostgres : IConfigurationParamRepository
   {
-    private readonly string connectionString;
+    private readonly string _connectionString;
 
-    public ConfigurationParamRepositoryPostgres(string connectionString)
+    public ConfigurationParamRepositoryPostgres(IConfiguration configuration)
     {
-      this.connectionString = connectionString ?? throw new ArgumentNullException(nameof(connectionString));
+      _connectionString = configuration["BlacklistManagerConnectionStrings:DBConnectionString"];
     }
 
     public async Task DeleteAsync(ConfigurationParam configParam)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await Common.HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       string cmdText = @"DELETE FROM configurationParam WHERE paramKey=@paramKey";
       await connection.ExecuteAsync(cmdText,
         new
@@ -35,8 +32,7 @@ namespace BlacklistManager.Infrastructure.Repositories
 
     public async Task<IEnumerable<ConfigurationParam>> GetAsync()
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await Common.HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       string cmdText = @"SELECT paramKey, paramValue FROM configurationParam";
       var all = await connection.QueryAsync<ConfigurationParam>(cmdText);
       return all.ToArray();
@@ -44,8 +40,7 @@ namespace BlacklistManager.Infrastructure.Repositories
 
     public async Task<ConfigurationParam> GetAsync(ConfigurationParam configParam)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await Common.HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       string cmdText = @"SELECT paramKey, paramValue FROM configurationParam WHERE paramKey=@paramKey";
       var all = await connection.QueryAsync<ConfigurationParam>(cmdText,
         new
@@ -57,8 +52,7 @@ namespace BlacklistManager.Infrastructure.Repositories
 
     public async Task<ConfigurationParam> InsertAsync(ConfigurationParam configParam)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await Common.HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       string cmdText =
         @"INSERT INTO configurationParam (paramKey, paramValue) " +
         "VALUES (@paramKey, @paramValue) " +
@@ -75,8 +69,7 @@ namespace BlacklistManager.Infrastructure.Repositories
 
     public async Task<bool> UpdateAsync(ConfigurationParam configParam)
     {
-      using var connection = new NpgsqlConnection(connectionString);
-      RetryUtils.Exec(() => connection.Open());
+      using var connection = await Common.HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
       string update =
       "UPDATE configurationParam " +
       "SET paramValue=@paramValue " +

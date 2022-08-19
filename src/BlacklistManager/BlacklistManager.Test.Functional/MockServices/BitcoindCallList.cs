@@ -1,12 +1,12 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
 
-using BlacklistManager.Domain.Models;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using static Common.BitcoinRpcClient.Requests.RpcFrozenFunds;
 
 namespace BlacklistManager.Test.Functional.MockServices
 {
@@ -37,17 +37,17 @@ namespace BlacklistManager.Test.Functional.MockServices
       AllCalls.Clear();
     }
     
-    public void AddToPolicyCall(string nodeId, IEnumerable<Fund> funds)
+    public void AddToPolicyCall(string nodeId, Common.BitcoinRpcClient.Requests.RpcFrozenFunds funds)
     {
       AllCalls.Add(new Call(Methods.AddToPolicy, nodeId, funds));
     }
 
-    public void AddToConsensusCall(string nodeId, IEnumerable<Fund> funds)
+    public void AddToConsensusCall(string nodeId, Common.BitcoinRpcClient.Requests.RpcFrozenFunds funds)
     {
       AllCalls.Add(new Call(Methods.AddToConsensus, nodeId, funds));
     }
 
-    public void RemoveFromPolicyCall(string nodeId, IEnumerable<Fund> funds)
+    public void RemoveFromPolicyCall(string nodeId, Common.BitcoinRpcClient.Requests.RpcFrozenFunds funds)
     {
       AllCalls.Add(new Call(Methods.RemoveFromPolicy, nodeId, funds));
     }    
@@ -81,7 +81,7 @@ namespace BlacklistManager.Test.Functional.MockServices
 
     public class Call
     {
-      public Call(string methodName, string nodeId, IEnumerable<Fund> funds)
+      public Call(string methodName, string nodeId, Common.BitcoinRpcClient.Requests.RpcFrozenFunds funds)
       {
         MethodName = methodName;
         NodeId = nodeId;
@@ -89,20 +89,24 @@ namespace BlacklistManager.Test.Functional.MockServices
         if (funds != null)
         {
           TxIds = string.Join("/",
-            Funds
+            Funds.Funds
               .OrderBy(f => f.TxOut.TxId)
               .Select(FundToStr));
         }
       }
 
-      private string FundToStr(Fund fund)
+      private string FundToStr(RpcFund fund)
       {
-        string eah = string.Join(";", 
-          fund.EnforceAtHeight.GetConsolidatedList()
-            .OrderBy(e => e.Start)
-            .Select(e => $"{e.Start},{e.Stop}"));
-
+        string eah = string.Empty;
         string p = string.Empty;
+        if (fund.EnforceAtHeight != null && fund.EnforceAtHeight.Any())
+        {
+          eah = string.Join(";",
+            fund.EnforceAtHeight
+              .OrderBy(e => e.Start)
+              .Select(e => $"{e.Start},{e.Stop}"));
+        }
+
         if (MethodName == Methods.AddToConsensus)
         {
           p = $"{fund.PolicyExpiresWithConsensus}";
@@ -110,7 +114,7 @@ namespace BlacklistManager.Test.Functional.MockServices
         return $"{fund.TxOut.TxId},{fund.TxOut.Vout}|{eah}|{p}";
       }
 
-      public IEnumerable<Fund> Funds { get; set; }
+      public Common.BitcoinRpcClient.Requests.RpcFrozenFunds Funds { get; set; }
       public string TxIds;
       public string NodeId;
       public string MethodName;

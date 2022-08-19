@@ -1,6 +1,6 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
-using BlacklistManager.Domain.Models;
+using BlacklistManager.Domain.Actions;
 
 namespace BlacklistManager.Test.Functional.MockServices
 {

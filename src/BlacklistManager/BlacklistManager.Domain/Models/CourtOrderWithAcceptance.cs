@@ -10,6 +10,8 @@ namespace BlacklistManager.Domain.Models
 
     public string CourtOrderHash { get; set; }
 
+    public int? RetryCount { get; set; }
+
     public IEnumerable<CourtOrderAcceptance> CourtOrderAcceptances { get; set; }
   }
 }

@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
 using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 using Common;
 
 namespace BlacklistManager.API.Rest.ViewModels
@@ -12,27 +12,27 @@ namespace BlacklistManager.API.Rest.ViewModels
   public class SignedCourtOrderViewModel
   {
     [Required]
-    [JsonPropertyName("payload")]
+    [JsonProperty("payload")]
     public string Payload { get; set; }
 
     [Required]
-    [JsonPropertyName("signature")]
+    [JsonProperty("signature")]
     public string Signature { get; set; }
 
     [Required]
-    [JsonPropertyName("publicKey")]
+    [JsonProperty("publicKey")]
     public string PublicKey { get; set; }
 
     [Required]
-    [JsonPropertyName("encoding")]
+    [JsonProperty("encoding")]
     public string Encoding { get; set; }
 
     [Required]
-    [JsonPropertyName("mimetype")]
+    [JsonProperty("mimetype")]
     [RegularExpression("application/json")]
     public string Mimetype { get; set; }
 
-    [JsonPropertyName("signatureType")]
+    [JsonProperty("signatureType")]
     public string SignatureType { get; set; }
 
     public JsonEnvelope ToDomainObject()

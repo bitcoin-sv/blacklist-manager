@@ -1,19 +1,20 @@
 // Copyright (c) 2020 Bitcoin Association
 
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Reflection;
 using BlacklistManager.API.Rest.Database;
 using BlacklistManager.Domain;
 using BlacklistManager.Domain.Actions;
 using BlacklistManager.Domain.BackgroundJobs;
 using BlacklistManager.Domain.ExternalServices;
-using BlacklistManager.Domain.Models;
 using BlacklistManager.Domain.Repositories;
+using BlacklistManager.Infrastructure.Actions;
 using BlacklistManager.Infrastructure.Authentication;
+using BlacklistManager.Infrastructure.BackgroundJobs;
 using BlacklistManager.Infrastructure.ExternalServices;
 using BlacklistManager.Infrastructure.Repositories;
-using Common;
-using Common.BitcoinRpc;
+using Common.Bitcoin;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -21,6 +22,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NBitcoin;
+using OpenTelemetry.Metrics;
 
 namespace BlacklistManager.API.Rest
 {
@@ -41,8 +43,7 @@ namespace BlacklistManager.API.Rest
       services.AddOptions<AppSettings>()
         .Bind(Configuration.GetSection("AppSettings"))
         .ValidateDataAnnotations();
-
-      string blackListManagerConnectionString = Configuration["BlacklistManagerConnectionStrings:DBConnectionString"];
+      services.AddOptions();
 
       services.AddAuthentication(options =>
       {
@@ -54,44 +55,56 @@ namespace BlacklistManager.API.Rest
       // time in database is UTC so it is automatically mapped to Kind=UTC
       Dapper.SqlMapper.AddTypeHandler(new Common.DateTimeHandler());
 
+      services.AddLogging(logging =>
+      {
+        logging.AddSimpleConsole(conf =>
+        {
+          conf.TimestampFormat = "yyyy.MM.dd HH:mm:ss:fff ";
+          conf.UseUtcTimestamp = true;
+          conf.ColorBehavior = Microsoft.Extensions.Logging.Console.LoggerColorBehavior.Default;
+          conf.IncludeScopes = false;
+        });
+      });
+
       services.AddControllers().AddJsonOptions(options => { options.JsonSerializerOptions.WriteIndented = true;});
       
       services.AddTransient<IStartupChecker, StartupChecker>();
       services.AddTransient<ICreateDB, CreateBlacklistManagerDB>();
-      services.AddTransient<IDomainAction, DomainAction>();
-      services.AddTransient<IQueryAction>(x => new QueryAction(blackListManagerConnectionString));
-      services.AddTransient<ICourtOrderRepository, CourtOrderRepositoryPostgres>(sp => 
-        new CourtOrderRepositoryPostgres(
-          blackListManagerConnectionString, 
-          sp.GetRequiredService<ILoggerFactory>()));
-      services.AddTransient<ITrustListRepository>( x => new TrustListRepositoryPostgres(blackListManagerConnectionString));
-      services.AddTransient<INodeRepository>(x => new NodeRepositoryPostgres(blackListManagerConnectionString));
-      services.AddTransient<ILegalEntityRepository>(x => new LegalEntityRepositoryPostgres(blackListManagerConnectionString));
-      services.AddTransient<IDelegatedKeyRepositoryPostgres>(x => new DelegatedKeyRepositoryPostgres(blackListManagerConnectionString, x.GetRequiredService<ILoggerFactory>()));
+      services.AddTransient<ICourtOrderRepository, CourtOrderRepositoryPostgres>();
+      services.AddTransient<ITrustListRepository, TrustListRepositoryPostgres>();
+      services.AddTransient<INodeRepository, NodeRepositoryPostgres>();
+      services.AddTransient<ILegalEntityRepository, LegalEntityRepositoryPostgres>();
+      services.AddTransient<IDelegatedKeyRepositoryPostgres, DelegatedKeyRepositoryPostgres>();
       services.AddTransient<ICourtOrders, CourtOrders>();
+      services.AddTransient<IFundPropagator, FundPropagator>();
       services.AddTransient<INodes, Nodes>();
       services.AddTransient<ILegalEndpoints, LegalEndpoints>();
       services.AddTransient<IDelegatedKeys, DelegatedKeys>();
-      services.AddTransient<IFundPropagatorFactory, FundPropagatorFactory>();
       services.AddTransient<ILongWait, LongWait>();
-      services.AddTransient<IConfigurationParamRepository>(x => new ConfigurationParamRepositoryPostgres(blackListManagerConnectionString));
+      services.AddTransient<IConfigurationParamRepository, ConfigurationParamRepositoryPostgres>();
+      services.AddTransient<IConfiscationTxProcessing, ConfiscationTxProcessing>();
 
       services.AddTransient<IConfigurationParams, ConfigurationParams>();
 
       if (HostEnvironment.EnvironmentName != "Testing")
       {
-        services.AddTransient<IBitcoindFactory, BitcoindFactory>();
+        services.AddTransient<IBitcoinFactory, BitcoinFactory>(sp => 
+        {
+          return new BitcoinFactory(Configuration["AppSettings:BlockChain"], Network.GetNetwork(Configuration["AppSettings:BitcoinNetwork"]), sp.GetRequiredService<ILoggerFactory>(), sp.GetRequiredService<IHttpClientFactory>());
+        });
         services.AddTransient<ILegalEntityFactory, LegalEntityFactory>();
         services.AddTransient<IConsensusActivationValidatorFactory, ConsensusActivationValidatorFactory>();
         services.AddSingleton<IBackgroundJobs, BackgroundJobs>();
+        services.AddHostedService<BackgroundJobStarter>();
       }
 
-      services.AddHostedService<BackgroundJobStarter>();
-
-      services.AddSingleton<IBlacklistHttpClientFactory, BlacklistHttpClientFactoryDefault>();
-      services.AddSingleton<IBitcoinRpcHttpClientFactory, BitcoinRpcHttpClientFactoryDefault>();
-
-      services.AddHttpClient(BlacklistHttpClientFactoryDefault.ClientName)
+      services.AddHttpClient(LegalEntityFactory.CLIENT_NAME, config =>
+        {          
+          var productValue = new ProductInfoHeaderValue(
+             Assembly.GetExecutingAssembly().GetName().Name, 
+             Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>().InformationalVersion);
+          config.DefaultRequestHeaders.UserAgent.Add(productValue);
+        })
         .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
         {
           UseCookies =
@@ -99,13 +112,19 @@ namespace BlacklistManager.API.Rest
           AllowAutoRedirect = false
         });
 
+      services.AddSingleton<IMetrics, Infrastructure.Actions.Metrics>();
+      services.AddOpenTelemetryMetrics(x => 
+      {
+        x.AddMeter(Infrastructure.Actions.Metrics.COURT_ORDER_STATISTICS_METER);
+        x.AddPrometheusExporter();
+      });
     }
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
     public void Configure(IApplicationBuilder app, 
                           IWebHostEnvironment env, 
                           IHostApplicationLifetime lifetime,
-                          IDomainAction domainAction,
+                          IDelegatedKeys delegatedKeys,
                           ILogger<BlackListManagerLogger> logger)
     {
       if (env.IsDevelopment())
@@ -131,11 +150,12 @@ namespace BlacklistManager.API.Rest
       });
 
       app.UseRouting();
-
       app.UseAuthentication();
       app.UseAuthorization();
 
-      lifetime.ApplicationStarted.Register(() => { OnApplicationStarted(domainAction, Configuration); });
+      app.UseOpenTelemetryPrometheusScrapingEndpoint();
+
+      lifetime.ApplicationStarted.Register(() => { OnApplicationStarted(delegatedKeys, Configuration); });
 
       app.UseEndpoints(endpoints =>
       {
@@ -146,9 +166,9 @@ namespace BlacklistManager.API.Rest
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "VSTHRD002:Avoid problematic synchronous waits", Justification = "ApplicationStarted.Register() doesn't support async methods")]
-    private void OnApplicationStarted(IDomainAction domainAction, IConfiguration configuration)
+    private void OnApplicationStarted(IDelegatedKeys delegatedKeys, IConfiguration configuration)
     {
-      domainAction.CreateInitialSignerKeyAsync(Network.GetNetwork(configuration["AppSettings:BitcoinNetwork"])).GetAwaiter().GetResult();
+      delegatedKeys.CreateInitialSignerKeyAsync(Network.GetNetwork(configuration["AppSettings:BitcoinNetwork"]), HostEnvironment.EnvironmentName != "Testing").GetAwaiter().GetResult();
     }
   }
 }

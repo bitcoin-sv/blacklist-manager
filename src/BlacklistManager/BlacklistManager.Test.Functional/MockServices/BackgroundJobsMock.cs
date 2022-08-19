@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
 using BlacklistManager.Domain;
-using BlacklistManager.Domain.BackgroundJobs;
+using BlacklistManager.Infrastructure.BackgroundJobs;
 using Common;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -9,8 +9,6 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace BlacklistManager.Test.Functional.MockServices
@@ -19,21 +17,20 @@ namespace BlacklistManager.Test.Functional.MockServices
   {
     public BackgroundJobsMock(
       IServiceProvider serviceProvider, 
-      ILogger<BackgroundTask> bgtLogger, 
-      ILoggerFactory logger,
+      ILogger<BackgroundTask> bgtLogger,
+      ILogger<BackgroundJobs> logger,
       IOptions<AppSettings> options) 
       : base(serviceProvider, bgtLogger, logger, options)
     {
-      this.logger = logger.CreateLogger(TestBase.LOG_CATEGORY);
+      this._logger = logger;
       Tasks = new TaskList();
-      RetryDelayOverride = 100;
-      backgroundTasks.TaskCreated += BackgroundTasks_TaskCreated;
+      _backgroundTasks.TaskCreated += BackgroundTasks_TaskCreated;
     }
 
-    public TaskList Tasks = null;
-    public int RetryDelayOverride = 100;
+    public TaskList Tasks { get; set; }
+    public int RetryDelayOverride { get; set; } = 100;
 
-    private readonly ILogger logger;
+    private readonly ILogger _logger;
     protected override int OnErrorRetryDelay => RetryDelayOverride;
     protected override int ConsensusActivationRetryDelay => RetryDelayOverride;
 
@@ -49,19 +46,23 @@ namespace BlacklistManager.Test.Functional.MockServices
       int allEnd, allStart;
       do
       {
+        List<Task> taskList = new List<Task>();
         allStart = Tasks.All.Count;
-        logger.LogDebug("Waiting for all background jobs to end");
-        await WaitForCourtOrderProcessingAsync();
-        await WaitForPropagationAsync();
-        await WaitForCourtOrderAcceptanceAsync();
-        await WaitForConsensusActivationAsync();
+        _logger.LogDebug("Waiting for all background jobs to end");
+        taskList.Add(WaitForCourtOrderProcessingAsync());
+        taskList.Add(WaitForPropagationAsync());
+        taskList.Add(WaitForCourtOrderAcceptanceAsync());
+        taskList.Add(WaitForConsensusActivationAsync());
+        //taskList.Add(WaitForConfiscationTxsAsync());
+
+        await Task.WhenAll(taskList);
         allEnd = Tasks.All.Count;
         if (allEnd > allStart)
         {
-          logger.LogDebug("While waiting new background jobs were started");
+          _logger.LogDebug("While waiting new background jobs were started");
         }
       } while (allEnd > allStart);
-      logger.LogDebug("All background jobs ended");
+      _logger.LogDebug("All background jobs ended");
     }
 
     public async Task WaitForCourtOrderProcessingAsync()
@@ -84,7 +85,7 @@ namespace BlacklistManager.Test.Functional.MockServices
     {
       if (Tasks.ProcessConsensusActivations.Any())
       {
-        await WaitGenericAsync(Tasks.ProcessConsensusActivations.Last(), BackgroundJobs.PROCESS_CONSENSUS_ACTIVATION);
+        await WaitGenericAsync(Tasks.ProcessConsensusActivations.Last(), BackgroundJobs.DOWNLOAD_CONSENSUS_ACTIVATION);
       }
     }
 
@@ -98,7 +99,6 @@ namespace BlacklistManager.Test.Functional.MockServices
 
     private async Task WaitGenericAsync(Task generic, string group)
     {
-      var cts = new CancellationTokenSource(WAIT_TIMEOUT);
       bool finished = false;
       if (await Task.WhenAny(generic, Task.Delay(WAIT_TIMEOUT)) == generic)
       {
@@ -126,21 +126,6 @@ namespace BlacklistManager.Test.Functional.MockServices
           return $"{Key}/{Task.Status}";
         }
       }
-      public void AssertEqualTo(params string[] expected)
-      {
-        Assert.AreEqual(string.Join(Environment.NewLine, expected), ToString());
-      }
-
-      public override string ToString()
-      {
-        var sb = new StringBuilder();
-        foreach (var task in items)
-        {
-          sb.AppendLine(task.ToString());
-        }
-
-        return sb.ToString().Trim();
-      }
 
       public IReadOnlyList<Task> All => items
         .Select(i => i.Task)
@@ -157,7 +142,7 @@ namespace BlacklistManager.Test.Functional.MockServices
         .ToList();
 
       public IReadOnlyList<Task> ProcessConsensusActivations => items
-        .Where(i => i.Key == BackgroundJobs.PROCESS_CONSENSUS_ACTIVATION)
+        .Where(i => i.Key == BackgroundJobs.DOWNLOAD_CONSENSUS_ACTIVATION)
         .Select(i => i.Task)
         .ToList();
 

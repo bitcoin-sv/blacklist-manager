@@ -5,7 +5,7 @@ using System.Text.Json.Serialization;
 
 namespace BlacklistManager.API.Rest.ViewModels
 {
-  public class TrustListItemViewModelCreate // used for POST/PUT
+  public class TrustListItemViewModelCreate
   {
     [Required]
     [JsonPropertyName("id")]

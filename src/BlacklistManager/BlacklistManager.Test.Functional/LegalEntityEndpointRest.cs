@@ -18,15 +18,15 @@ namespace BlacklistManager.Test.Functional
     public async Task TestInitializeAsync()
     {
       await InitializeAsync(mockedServices: true);
-      await backgroundJobs.StopAllAsync(); // don't want process for court order acceptance to start 
+      await BackgroundJobs.StopAllAsync(); // don't want process for court order acceptance to start 
       // This key is needed when adding NT endpoint
-      TrustlistRepository.CreatePublicKey("0293ff7c31eaa93ce4701a462676c1e46dac745f6848097f57357d2a414b379a34", true, null);
+      await TrustlistRepository.CreatePublicKeyAsync("0293ff7c31eaa93ce4701a462676c1e46dac745f6848097f57357d2a414b379a34", true, null);
     }
 
     [TestCleanup]
-    public void TestCleanup()
+    public async Task TestCleanupAsync()
     {
-      base.Cleanup();
+      await base.CleanupAsync();
     }
 
     [TestMethod]
@@ -49,24 +49,24 @@ namespace BlacklistManager.Test.Functional
       var entry = GetItemToCreate();
 
       // Create new one using POST
-      var (le1, httpResponse) = await PostAsync<LegalEntityEndpointViewModelCreate, LegalEntityEndpointViewModelGet>(client, entry, HttpStatusCode.Created);
+      var (le1, httpResponse) = await PostAsync<LegalEntityEndpointViewModelCreate, LegalEntityEndpointViewModelGet>(Client, entry, HttpStatusCode.Created);
 
       var firstKey = le1.Id.ToString();
 
       // disable first one
-      await client.PostAsync(UrlForKey(firstKey) + "/disable", null);
+      await Client.PostAsync(UrlForKey(firstKey) + "/disable", null);
 
       // check validUntil
-      var entry1Response = await GetAsync<LegalEntityEndpointViewModelGet>(client, UrlForKey(firstKey), HttpStatusCode.OK);
+      var entry1Response = await GetAsync<LegalEntityEndpointViewModelGet>(Client, UrlForKey(firstKey), HttpStatusCode.OK);
 
       Assert.IsNotNull(entry1Response.ValidUntil);
       Assert.IsTrue(entry1Response.ValidUntil <= DateTime.UtcNow);
 
       // enable first one
-      await client.PostAsync(UrlForKey(firstKey) + "/enable", null);
+      await Client.PostAsync(UrlForKey(firstKey) + "/enable", null);
 
       // check validUntil
-      entry1Response = await GetAsync<LegalEntityEndpointViewModelGet>(client, UrlForKey(firstKey), HttpStatusCode.OK);
+      entry1Response = await GetAsync<LegalEntityEndpointViewModelGet>(Client, UrlForKey(firstKey), HttpStatusCode.OK);
 
       Assert.IsNull(entry1Response.ValidUntil);
     }

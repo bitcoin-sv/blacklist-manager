@@ -5,14 +5,14 @@ using Microsoft.Extensions.DependencyInjection;
 using BlacklistManager.Domain.ExternalServices;
 using BlacklistManager.Test.Functional.MockServices;
 using BlacklistManager.Domain.BackgroundJobs;
-using BlacklistManager.Domain.Models;
 using Microsoft.AspNetCore.Hosting;
 using BlacklistManager.Domain.Repositories;
 using BlacklistManager.Infrastructure.Repositories;
-using Microsoft.Extensions.Logging;
+using BlacklistManager.Domain.Actions;
+using Common.Bitcoin;
 
 namespace BlacklistManager.Test.Functional.Server
-{
+{ 
   public class BlacklistManagerTestsStartup : API.Rest.Startup
   {
     public BlacklistManagerTestsStartup(IConfiguration env, IWebHostEnvironment environment) : base(env, environment)
@@ -23,20 +23,15 @@ namespace BlacklistManager.Test.Functional.Server
     {
       base.ConfigureServices(services);
 
-      string blackListManagerConnectionString = Configuration["BlacklistManagerConnectionStrings:DBConnectionString"];
-
-      services.AddSingleton<IBitcoindFactory, BitcoindFactoryMock>();
+      services.AddSingleton<IBitcoinFactory, BitcoinFactoryMock>();
       services.AddSingleton<ILegalEntityFactory, LegalEntityFactoryMock>();
       services.AddSingleton<IConsensusActivationValidatorFactory, ConsensusActivationValidatorFactoryMock>();
       services.AddSingleton<IBackgroundJobs, BackgroundJobsMock>();
-      services.AddSingleton<ICourtOrderRepository, CourtOrderRepositoryPostgres>(sp =>
-        new CourtOrderRepositoryPostgres(
-          blackListManagerConnectionString,
-          sp.GetRequiredService<ILoggerFactory>()));
-      services.AddSingleton<ITrustListRepository>(x => new TrustListRepositoryPostgres(blackListManagerConnectionString));
-      services.AddSingleton<INodeRepository>(x => new NodeRepositoryPostgres(blackListManagerConnectionString));
-      services.AddSingleton<ILegalEntityRepository>(x => new LegalEntityRepositoryPostgres(blackListManagerConnectionString));
-      services.AddSingleton<IDelegatedKeyRepositoryPostgres>(x => new DelegatedKeyRepositoryPostgres(blackListManagerConnectionString, x.GetRequiredService<ILoggerFactory>()));
+      services.AddSingleton<ICourtOrderRepository, CourtOrderRepositoryPostgres>();
+      services.AddSingleton<ITrustListRepository, TrustListRepositoryPostgres>();
+      services.AddSingleton<INodeRepository, NodeRepositoryPostgres>();
+      services.AddSingleton<ILegalEntityRepository, LegalEntityRepositoryPostgres>();
+      
 
       // register IPropagationEvents
       services.AddSingleton<IPropagationEvents, PropagationEventsMock>();

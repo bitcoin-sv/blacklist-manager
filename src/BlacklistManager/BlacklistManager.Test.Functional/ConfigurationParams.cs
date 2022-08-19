@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Threading.Tasks;
 using BlacklistManager.Domain.Models;
 using BlacklistManager.Domain.Repositories;
+using BlacklistManager.Domain.Actions;
 
 namespace BlacklistManager.Test.Functional
 {
@@ -18,23 +19,23 @@ namespace BlacklistManager.Test.Functional
     }
 
     [TestCleanup]
-    public void TestCleanup()
+    public async Task TestCleanupAsync()
     {
-      base.Cleanup();
+      await base.CleanupAsync();
     }
 
     [TestMethod]
     public async Task ConfigurationParams_DefaultsAsync()
     {
-      var cp = server.Services.GetRequiredService<IConfigurationParams>();
+      var cp = Server.Services.GetRequiredService<IConfigurationParams>();
       Assert.AreEqual(75, await cp.GetDesiredHashrateAcceptancePercentAsync());
     }
 
     [TestMethod]
     public async Task ConfigurationParams_ValuesFromDatabaseAsync()
     {
-      var cp = server.Services.GetRequiredService<IConfigurationParams>();
-      var repo = server.Services.GetRequiredService<IConfigurationParamRepository>();
+      var cp = Server.Services.GetRequiredService<IConfigurationParams>();
+      var repo = Server.Services.GetRequiredService<IConfigurationParamRepository>();
 
       //act
       await repo.InsertAsync(new ConfigurationParam("DesiredHashrateAcceptancePercent", "76"));
@@ -47,8 +48,8 @@ namespace BlacklistManager.Test.Functional
     public async Task ConfigurationParams_IligalValueInDatabase_ShouldReturnDefaultAsync()
     {
       //arrange
-      var cp = server.Services.GetRequiredService<IConfigurationParams>();
-      var repo = server.Services.GetRequiredService<IConfigurationParamRepository>();
+      var cp = Server.Services.GetRequiredService<IConfigurationParams>();
+      var repo = Server.Services.GetRequiredService<IConfigurationParamRepository>();
 
       //act
       await repo.InsertAsync(new ConfigurationParam("DesiredHashrateAcceptancePercent", "x"));
@@ -60,8 +61,8 @@ namespace BlacklistManager.Test.Functional
     [TestMethod]
     public async Task ConfigurationParams_UpdateValuesAsync()
     {
-      var cp = server.Services.GetRequiredService<IConfigurationParams>();
-      var repo = server.Services.GetRequiredService<IConfigurationParamRepository>();
+      var cp = Server.Services.GetRequiredService<IConfigurationParams>();
+      var repo = Server.Services.GetRequiredService<IConfigurationParamRepository>();
 
       //act
       await repo.InsertAsync(new ConfigurationParam("DesiredHashrateAcceptancePercent", "76"));

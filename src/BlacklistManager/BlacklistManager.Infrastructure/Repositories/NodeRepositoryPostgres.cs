@@ -3,180 +3,151 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using BlacklistManager.Domain.Models;
 using BlacklistManager.Domain.Repositories;
 using Common;
 using Dapper;
-using Npgsql;
+using Microsoft.Extensions.Configuration;
 
 namespace BlacklistManager.Infrastructure.Repositories
 {
   public class NodeRepositoryPostgres : INodeRepository
   {
 
-    private readonly string connectionString;
+    private readonly string _connectionString;
 
-    public NodeRepositoryPostgres(string connectionString)
+    public NodeRepositoryPostgres(IConfiguration configuration)
     {
-      this.connectionString = connectionString;
+      _connectionString = configuration["BlacklistManagerConnectionStrings:DBConnectionString"];
     }
 
-    public Node CreateNode(Node node)
+    public async Task<Node> CreateNodeAsync(Node node)
     {
-      using (var connection = new NpgsqlConnection(connectionString))
-      {
-        RetryUtils.Exec(() => connection.Open());
-        using (var transaction = connection.BeginTransaction())
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
+      using var transaction = await connection.BeginTransactionAsync();
+      string insertOrUpdate =
+        "INSERT INTO Node " +
+        "  (host, port, username, password, nodestatus, remarks) " +
+        "  VALUES (@host, @port, @username, @password, @nodestatus, @remarks)" +
+        "  ON CONFLICT (host, port) DO NOTHING " +
+        "  RETURNING *"
+      ;
+
+      var now = DateTime.UtcNow;
+
+      var insertedNode = (await connection.QueryAsync<Node>(insertOrUpdate,
+        new
         {
-          string insertOrUpdate =
-            "INSERT INTO Node " +
-            "  (host, port, username, password, nodestatus, remarks) " +
-            "  VALUES (@host, @port, @username, @password, @nodestatus, @remarks)" +
-            "  ON CONFLICT (host, port) DO NOTHING " +
-            "  RETURNING *"
-          ;
+          host = node.Host.ToLower(),
+          port = node.Port,
+          username = node.Username,
+          password = node.Password,
+          nodestatus = node.Status,
+          remarks = node.Remarks
+        },
+        transaction
+      )).SingleOrDefault();
+      await transaction.CommitAsync();
 
-          var now = DateTime.UtcNow;
-
-          var insertedNode = connection.Query<Node>(insertOrUpdate,
-            new
-            {
-              host = node.Host.ToLower(),
-              port = node.Port,
-              username = node.Username,
-              password = node.Password,
-              nodestatus = node.Status,
-              remarks = node.Remarks
-            },
-            transaction
-          ).SingleOrDefault();
-          transaction.Commit();
-
-          return insertedNode;
-        }
-      }
+      return insertedNode;
     }
 
-    public bool UpdateNode(Node node)
+    public async Task<bool> UpdateNodeAsync(Node node)
     {
-      using (var connection = new NpgsqlConnection(connectionString))
-      {
-        RetryUtils.Exec(() => connection.Open());
-        using (var transaction = connection.BeginTransaction())
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
+      using var transaction = await connection.BeginTransactionAsync();
+      string update =
+      "UPDATE Node " +
+      "  SET  username=@username, password=@password, remarks=@remarks " +
+      "  WHERE host=@host AND port=@port";
+
+
+      int recordAffected = await connection.ExecuteAsync(update,
+        new
         {
-          string update =
-          "UPDATE Node " +
-          "  SET  username=@username, password=@password, remarks=@remarks " +
-          "  WHERE host=@host AND port=@port";
+          host = node.Host.ToLower(),
+          port = node.Port,
+          username = node.Username,
+          password = node.Password,
+            //nodestatus = node.Status, // NodeStatus is not present in ViewModel
+            remarks = node.Remarks
+        },
+        transaction
+      );
+      await transaction.CommitAsync();
 
-
-          int recordAffected = connection.Execute(update,
-            new
-            {
-              host = node.Host.ToLower(),
-              port = node.Port,
-              username = node.Username,
-              password = node.Password,
-              //nodestatus = node.Status, // NodeStatus is not present in ViewModel
-              remarks = node.Remarks
-            },
-            transaction
-          );
-          transaction.Commit();
-
-          return recordAffected > 0;
-        }
-      }
+      return recordAffected > 0;
     }
 
-    public bool UpdateNodeError(Node node)
+    public async Task<bool> UpdateNodeErrorAsync(Node node)
     {
-      using (var connection = new NpgsqlConnection(connectionString))
-      {
-        RetryUtils.Exec(() => connection.Open());
-        using (var transaction = connection.BeginTransaction())
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
+      using var transaction = await connection.BeginTransactionAsync();
+      string update =
+      "UPDATE Node " +
+      "  SET  lastError=@lastError, lastErrorAt=@lastErrorAt " +
+      "  WHERE nodeId=@nodeId";
+
+      int recordAffected = await connection.ExecuteAsync(update,
+        new
         {
-          string update =
-          "UPDATE Node " +
-          "  SET  lastError=@lastError, lastErrorAt=@lastErrorAt " +
-          "  WHERE nodeId=@nodeId";
+          lastError = node.LastError,
+          lastErrorAt = node.LastErrorAt,
+          nodeId = node.Id
+        },
+        transaction
+      );
+      await transaction.CommitAsync();
 
-          int recordAffected = connection.Execute(update,
-            new
-            {
-              lastError = node.LastError,
-              lastErrorAt = node.LastErrorAt,
-              nodeId = node.Id
-            },
-            transaction
-          );
-          transaction.Commit();
-
-          return recordAffected > 0;
-        }
-      }
+      return recordAffected > 0;
     }
 
-    public Node GetNode(string hostAndPort)
+    public async Task<Node> GetNodeAsync(string hostAndPort)
     {
       var (host, port) = Node.SplitHostAndPort(hostAndPort);
 
-      using (var connection = new NpgsqlConnection(connectionString))
-      {
-        RetryUtils.Exec(() => connection.Open());
-        using (var transaction = connection.BeginTransaction())
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
+      using var transaction = await connection.BeginTransactionAsync();
+      string cmd = "SELECT nodeId, host, port, username, password, remarks, nodeStatus, lastError, lastErrorAt  FROM Node WHERE host = @host AND  port = @port";
+      return (await connection.QueryAsync<Node>(cmd,
+        new
         {
-          string cmd = "SELECT nodeId, host, port, username, password, remarks, nodeStatus, lastError, lastErrorAt  FROM Node WHERE host = @host AND  port = @port";
-          return connection.Query<Node>(cmd,
-            new
-            {
-              host = host.ToLower(),
-              port
-            },
-            transaction
-          ).FirstOrDefault();
-        }
-      }
+          host = host.ToLower(),
+          port
+        },
+        transaction
+      )).FirstOrDefault();
     }
 
-    public int DeleteNode(string hostAndPort)
+    public async Task<int> DeleteNodeAsync(string hostAndPort)
     {
       var (host, port) = Node.SplitHostAndPort(hostAndPort);
 
-      using (var connection = new NpgsqlConnection(connectionString))
-      {
-        RetryUtils.Exec(() => connection.Open());
-        using (var transaction = connection.BeginTransaction())
-        {
-          string cmd =
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
+      using var transaction = await connection.BeginTransactionAsync();
+      string cmd =
 "DELETE FROM fundstatenode WHERE nodeid=(SELECT nodeId FROM Node WHERE host = @host AND  port = @port); " +
 "DELETE FROM Node WHERE host = @host AND  port = @port;";
-          var result =  connection.Execute(cmd,
-            new
-            {
-              host = host.ToLower(),
-              port
-            },
-            transaction
-          );
-          transaction.Commit();
-          return result;
-        }
-      }
+      var result = await connection.ExecuteAsync(cmd,
+        new
+        {
+          host = host.ToLower(),
+          port
+        },
+        transaction
+      );
+      await transaction.CommitAsync();
+      return result;
     }
 
-    public IEnumerable<Node> GetNodes()
+    public async Task<IEnumerable<Node>> GetNodesAsync()
     {
-      using (var connection = new NpgsqlConnection(connectionString))
-      {
-        RetryUtils.Exec(() => connection.Open());
-        using (var transaction = connection.BeginTransaction())
-        {
-          string cmdText =
-            @"SELECT nodeId, host, port, username, password, remarks, nodeStatus, lastError, lastErrorAt FROM node ORDER by host, port";
-          return connection.Query<Node>(cmdText, null, transaction);
-        }
-      }
+      using var connection = await HelperTools.OpenNpgSQLConnectionAsync(_connectionString);
+      using var transaction = await connection.BeginTransactionAsync();
+      string cmdText =
+        @"SELECT nodeId, host, port, username, password, remarks, nodeStatus, lastError, lastErrorAt FROM node ORDER by host, port";
+      return await connection.QueryAsync<Node>(cmdText, null, transaction);
     }
   }
 }

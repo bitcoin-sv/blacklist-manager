@@ -2,6 +2,7 @@
 
 using BlacklistManager.API.Rest.Database;
 using Common;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
@@ -24,12 +25,12 @@ namespace BlacklistManager.API.Rest
       this.createDB = createDB;
     }
 
-    public async Task<bool> CheckAsync(bool testingEnvironment = false)
+    public async Task<bool> CheckAsync()
     {
       logger.LogInformation("Health checks starting.");
       try
       {
-        await HelperTools.ExecuteWithRetriesAsync(10, "Unable to open connection to database", () => TestDBConnectionAsync());
+        await RetryUtils.ExecuteWithRetriesAsync(10, "Unable to open connection to database", () => TestDBConnectionAsync());
         ExecuteCreateDb();
 
         logger.LogInformation("Health checks completed successfully.");

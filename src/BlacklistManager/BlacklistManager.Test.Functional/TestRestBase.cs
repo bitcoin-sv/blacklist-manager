@@ -4,6 +4,7 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Mime;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -67,7 +68,7 @@ namespace BlacklistManager.Test.Functional
     {
       var httpResponse = await client.PostAsync(GetBaseUrl(),
         new StringContent(JsonSerializer.Serialize(request),
-          Encoding.UTF8, "application/json"));
+          Encoding.UTF8, MediaTypeNames.Application.Json));
 
       Assert.AreEqual(expectedStatusCode, httpResponse.StatusCode);
 
@@ -88,7 +89,7 @@ namespace BlacklistManager.Test.Functional
     {
       var httpResponse = await client.PutAsync(uri,
         new StringContent(JsonSerializer.Serialize(request),
-          Encoding.UTF8, "application/json"));
+          Encoding.UTF8, MediaTypeNames.Application.Json));
 
       Assert.AreEqual(expectedStatusCode, httpResponse.StatusCode);
 
@@ -124,14 +125,14 @@ namespace BlacklistManager.Test.Functional
     [TestMethod]
     public async Task GetByID_NonExistingKey_ShouldReturn404Async()
     {
-      var httpResponse = await client.GetAsync(UrlForKey(GetNonExistentKey()));
+      var httpResponse = await Client.GetAsync(UrlForKey(GetNonExistentKey()));
       Assert.AreEqual(HttpStatusCode.NotFound, httpResponse.StatusCode);
     }
 
     [TestMethod]
     public async Task GetCollection_NoElements_ShouldReturn200EmptyAsync()
     {
-      var httpResponse = await client.GetAsync(GetBaseUrl());
+      var httpResponse = await Client.GetAsync(GetBaseUrl());
       Assert.AreEqual(HttpStatusCode.OK, httpResponse.StatusCode);
       var content = await httpResponse.Content.ReadAsStringAsync();
       Assert.AreEqual("[]", content);
@@ -144,17 +145,17 @@ namespace BlacklistManager.Test.Functional
       var item1Key = ExtractPostKey(item1);
 
       // Check that id does not exists (database is deleted at start of test)
-      await GetAsync<TGetViewModel>(client, UrlForKey(item1Key), HttpStatusCode.NotFound);
+      await GetAsync<TGetViewModel>(Client, UrlForKey(item1Key), HttpStatusCode.NotFound);
 
       // Create new one using POST
-      await PostAsync<TPostViewModel, TGetViewModel>(client, item1, HttpStatusCode.Created);
+      await PostAsync<TPostViewModel, TGetViewModel>(Client, item1, HttpStatusCode.Created);
 
       // We should be able to retrieve it:
-      var entry1Response = await GetAsync<TGetViewModel>(client, UrlForKey(item1Key), HttpStatusCode.OK);
+      var entry1Response = await GetAsync<TGetViewModel>(Client, UrlForKey(item1Key), HttpStatusCode.OK);
       Assert.AreEqual(item1Key, ExtractGetKey(entry1Response));
 
       // Retrieval by key should be case sensitive
-      await GetAsync<TGetViewModel>(client, UrlForKey(ChangeKeyCase(item1Key)), HttpStatusCode.OK);
+      await GetAsync<TGetViewModel>(Client, UrlForKey(ChangeKeyCase(item1Key)), HttpStatusCode.OK);
     }
 
     [TestMethod]
@@ -164,10 +165,10 @@ namespace BlacklistManager.Test.Functional
       var entryPostKey = ExtractPostKey(entryPost);
 
       // Check that id does not exists (database is deleted at start of test)
-      await GetAsync<TGetViewModel>(client, UrlForKey(ExtractPostKey(entryPost)), HttpStatusCode.NotFound);
+      await GetAsync<TGetViewModel>(Client, UrlForKey(ExtractPostKey(entryPost)), HttpStatusCode.NotFound);
 
       // Create new one using POST
-      var (entryResponsePost, reponsePost) = await PostAsync<TPostViewModel, TGetViewModel>(client, entryPost, HttpStatusCode.Created);
+      var (entryResponsePost, reponsePost) = await PostAsync<TPostViewModel, TGetViewModel>(Client, entryPost, HttpStatusCode.Created);
 
       CheckWasCreatedFrom(entryPost, entryResponsePost);
 
@@ -177,7 +178,7 @@ namespace BlacklistManager.Test.Functional
 
 
       // And we should be able to retrieve the entry through GET
-      var get2 = await GetAsync<TGetViewModel>(client, UrlForKey(entryPostKey), HttpStatusCode.OK);
+      var get2 = await GetAsync<TGetViewModel>(Client, UrlForKey(entryPostKey), HttpStatusCode.OK);
 
       // And entry returned by POST should be the same as entry returned by GET
       CheckWasCreatedFrom(entryPost, get2);
@@ -188,8 +189,9 @@ namespace BlacklistManager.Test.Functional
     {
       var entryPost = GetItemToCreate();
 
-      var (entryResponsePost, reponsePost) = await PostAsync<TPostViewModel, TGetViewModel>(client, entryPost, HttpStatusCode.Created);
-      var (entryResponsePost2, reponsePost2) = await PostAsync<TPostViewModel, TGetViewModel>(client, entryPost, HttpStatusCode.Conflict);
+      (_, _) = await PostAsync<TPostViewModel, TGetViewModel>(Client, entryPost, HttpStatusCode.Created);
+      await Task.Delay(500);
+      (_, _) = await PostAsync<TPostViewModel, TGetViewModel>(Client, entryPost, HttpStatusCode.Conflict);
     }
 
     [TestMethod]
@@ -200,11 +202,11 @@ namespace BlacklistManager.Test.Functional
       foreach (var entry in entries)
       {
         // Create new one using POST
-        await PostAsync<TPostViewModel, TGetViewModel>(client, entry, HttpStatusCode.Created);
+        await PostAsync<TPostViewModel, TGetViewModel>(Client, entry, HttpStatusCode.Created);
       }
 
       // We should be able to retrieve it:
-      var getEntries = await GetAsync<TGetViewModel[]>(client,
+      var getEntries = await GetAsync<TGetViewModel[]>(Client,
         GetBaseUrl(), HttpStatusCode.OK);
 
       Assert.AreEqual(entries.Length, getEntries.Length);
@@ -225,14 +227,14 @@ namespace BlacklistManager.Test.Functional
       var entryPostKey = ExtractPostKey(entryPost);
 
       // Check that id does not exists (database is deleted at start of test)
-      await GetAsync<TGetViewModel>(client, UrlForKey(entryPostKey), HttpStatusCode.NotFound);
+      await GetAsync<TGetViewModel>(Client, UrlForKey(entryPostKey), HttpStatusCode.NotFound);
 
 
       // Create new one using POST
-      await PostAsync<TPostViewModel, TGetViewModel>(client, entryPost, HttpStatusCode.Created);
+      await PostAsync<TPostViewModel, TGetViewModel>(Client, entryPost, HttpStatusCode.Created);
 
       // Try to create it again - it should fail
-      await PostAsync<TPostViewModel, TGetViewModel>(client, entryPost, HttpStatusCode.Conflict);
+      await PostAsync<TPostViewModel, TGetViewModel>(Client, entryPost, HttpStatusCode.Conflict);
     }
 
     [TestMethod]
@@ -242,20 +244,20 @@ namespace BlacklistManager.Test.Functional
       var entryPostKey = ExtractPostKey(entryPost);
 
       // Check that id does not exists (database is deleted at start of test)
-      await GetAsync<TGetViewModel>(client, UrlForKey(entryPostKey), HttpStatusCode.NotFound);
+      await GetAsync<TGetViewModel>(Client, UrlForKey(entryPostKey), HttpStatusCode.NotFound);
 
 
       // Try updating a non existent entry
-      await PutAsync(client, UrlForKey(entryPostKey), entryPost, HttpStatusCode.NotFound);
+      await PutAsync(Client, UrlForKey(entryPostKey), entryPost, HttpStatusCode.NotFound);
 
       // Create new one using POST
-      await PostAsync<TPostViewModel, TGetViewModel>(client, entryPost, HttpStatusCode.Created);
+      await PostAsync<TPostViewModel, TGetViewModel>(Client, entryPost, HttpStatusCode.Created);
 
       // Update entry:
       ModifyEntry(entryPost);
-      await PutAsync(client, UrlForKey(entryPostKey), entryPost, HttpStatusCode.NoContent);
+      await PutAsync(Client, UrlForKey(entryPostKey), entryPost, HttpStatusCode.NoContent);
 
-      var entryGot = await GetAsync<TGetViewModel>(client, UrlForKey(entryPostKey), HttpStatusCode.OK);
+      var entryGot = await GetAsync<TGetViewModel>(Client, UrlForKey(entryPostKey), HttpStatusCode.OK);
       CheckWasCreatedFrom(entryPost, entryGot);
 
 
@@ -263,9 +265,9 @@ namespace BlacklistManager.Test.Functional
       entryPostKey = ChangeKeyCase(entryPostKey);
       SetPostKey(entryPost, entryPostKey);
       ModifyEntry(entryPost);
-      await PutAsync(client, UrlForKey(entryPostKey), entryPost, HttpStatusCode.NoContent);
+      await PutAsync(Client, UrlForKey(entryPostKey), entryPost, HttpStatusCode.NoContent);
 
-      var entryGot2 = await GetAsync<TGetViewModel>(client, UrlForKey(entryPostKey), HttpStatusCode.OK);
+      var entryGot2 = await GetAsync<TGetViewModel>(Client, UrlForKey(entryPostKey), HttpStatusCode.OK);
       CheckWasCreatedFrom(entryPost, entryGot2);
     }
 
@@ -277,26 +279,26 @@ namespace BlacklistManager.Test.Functional
       foreach (var entry in entries)
       {
         // Create new one using POST
-        await PostAsync<TPostViewModel, TGetViewModel>(client, entry, HttpStatusCode.Created);
+        await PostAsync<TPostViewModel, TGetViewModel>(Client, entry, HttpStatusCode.Created);
       }
 
       // Check if all are there
       foreach (var entry in entries)
       {
         // Create new one using POST
-        await GetAsync<TGetViewModel>(client, UrlForKey(ExtractPostKey(entry)), HttpStatusCode.OK);
+        await GetAsync<TGetViewModel>(Client, UrlForKey(ExtractPostKey(entry)), HttpStatusCode.OK);
       }
 
       var firstKey = ExtractPostKey(entries.First());
         
       // Delete first one
-      await DeleteAsync(client, UrlForKey(firstKey));
+      await DeleteAsync(Client, UrlForKey(firstKey));
 
       // GET should not find the first anymore, but it should find the rest
       foreach (var entry in entries)
       {
         var key = ExtractPostKey(entry);
-        await GetAsync<TGetViewModel>(client, UrlForKey(key),
+        await GetAsync<TGetViewModel>(Client, UrlForKey(key),
 
           key == firstKey ? HttpStatusCode.NotFound : HttpStatusCode.OK);
       }
@@ -306,7 +308,7 @@ namespace BlacklistManager.Test.Functional
     public virtual async Task Delete_NoElement_ShouldReturnNoContentAsync()
     {
       // Delete always return NoContent to make (response) idempotent
-      await DeleteAsync(client, UrlForKey("XYZ:1"));
+      await DeleteAsync(Client, UrlForKey("XYZ:1"));
     }
   }
 }

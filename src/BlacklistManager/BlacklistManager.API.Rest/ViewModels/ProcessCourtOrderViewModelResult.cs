@@ -6,7 +6,7 @@ namespace BlacklistManager.API.Rest.ViewModels
 {
   public class ProcessCourtOrderViewModelResult
   {
-    public ProcessCourtOrderViewModelResult(Domain.Actions.ProcessCourtOrderResult result)
+    public ProcessCourtOrderViewModelResult(Domain.Models.ProcessCourtOrderResult result)
     {
       Id = result.CourtOrderHash;
     }

@@ -1,6 +1,8 @@
 // Copyright (c) 2020 Bitcoin Association
 
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NBitcoin.DataEncoders;
+using System;
 using System.IO;
 
 namespace Common.Test.Unit
@@ -66,6 +68,26 @@ namespace Common.Test.Unit
 
       jsonEnvelope = SignatureTools.CreateJSonSignature(t, wif.ToWif());
       File.WriteAllText("./TestData/JSONEnvelopeTestDocument.json", jsonEnvelope);
+    }
+
+    [TestMethod]
+    public void TestVerifyJSONBitcoinSignatureWithZeroBytes()
+    {
+      string testString = "efefefefefefefefefef";
+      var key = new NBitcoin.Key();
+      var signature = HelperTools.ConvertFromHexToBase64(SignatureTools.SignHash(testString, key.GetBitcoinSecret(NBitcoin.Network.RegTest).ToWif()));
+
+      var controlSignature = Encoders.Base64.DecodeData(signature);
+
+      Span<byte> sigLowZeroBytes = stackalloc byte[65];
+      Span<byte> sigHighZeroBytes = stackalloc byte[65];
+      controlSignature.AsSpan().Slice(33).CopyTo(sigLowZeroBytes.Slice(33));
+      controlSignature.AsSpan().Slice(1, 32).CopyTo(sigHighZeroBytes.Slice(1));
+
+      Assert.IsTrue(SignatureTools.VerifyBitcoinSignature(testString, Convert.ToBase64String(controlSignature), key.PubKey.ToHex(), out var _));
+
+      Assert.IsFalse(SignatureTools.VerifyBitcoinSignature(testString, Convert.ToBase64String(sigLowZeroBytes), key.PubKey.ToHex(), out _));
+      Assert.IsFalse(SignatureTools.VerifyBitcoinSignature(testString, Convert.ToBase64String(sigHighZeroBytes), key.PubKey.ToHex(), out _));
     }
   }
 }

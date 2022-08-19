@@ -1,10 +1,10 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
-using System;
 using System.Threading.Tasks;
 using BlacklistManager.Test.Functional.MockServices;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using BlacklistManager.Domain.Models;
+using Common;
 
 namespace BlacklistManager.Test.Functional
 {
@@ -18,9 +18,9 @@ namespace BlacklistManager.Test.Functional
     }
 
     [TestCleanup]
-    public void TestCleanup()
+    public async Task TestCleanupAsync()
     {
-      base.Cleanup();
+      await base.CleanupAsync();
     }
 
 
@@ -29,42 +29,42 @@ namespace BlacklistManager.Test.Functional
     {
       //arrange
       // see base.Initialize()
-      bitcoindFactory.Reset(new string[] { BitcoindCallList.Methods.GetBlockCount});
+      BitcoindFactory.Reset(new string[] { BitcoindCallList.Methods.GetBlockCount});
 
       //assert
-      string courtOrderHash1 = await Utils.SubmitFreezeOrderAsync(client, 
-        ("a", 1), 
-        ("b", 2));
-      await backgroundJobs.WaitAllAsync();
-      bitcoindFactory.AssertEqualAndClear("");
+      string courtOrderHash1 = await Utils.SubmitFreezeOrderAsync(Client, 
+        (1000, "a", 1), 
+        (1000, "b", 2));
+      await BackgroundJobs.WaitForPropagationAsync();
+      BitcoindFactory.AssertEqualAndClear("");
 
-      await domainLogic.CreateNodeAsync(new Node("node1", 0, "mocked", "mocked", null));
-      await backgroundJobs.WaitAllAsync();
-      bitcoindFactory.AssertEqualAndClear(
+      await Nodes.CreateNodeAsync(new Node("node1", 0, "mocked", "mocked", null));
+      await BackgroundJobs.WaitAllAsync();
+      BitcoindFactory.AssertEqualAndClear(
         "node1:clearAllBlacklists",
         "node1:addToPolicy/a,1||/b,2||");
 
       // add second node
-      await domainLogic.CreateNodeAsync(new Node("node2", 0, "mocked", "mocked", null));
-      await backgroundJobs.WaitAllAsync();
-      bitcoindFactory.AssertEqualAndClear(
+      await Nodes.CreateNodeAsync(new Node("node2", 0, "mocked", "mocked", null));
+      await BackgroundJobs.WaitAllAsync();
+      BitcoindFactory.AssertEqualAndClear(
         "node2:clearAllBlacklists",
         "node2:addToPolicy/a,1||/b,2||");
 
       // add third node
-      await domainLogic.CreateNodeAsync(new Node("node3", 0, "mocked", "mocked", null));
-      await backgroundJobs.WaitAllAsync();
-      bitcoindFactory.AssertEqualAndClear(
+      await Nodes.CreateNodeAsync(new Node("node3", 0, "mocked", "mocked", null));
+      await BackgroundJobs.WaitAllAsync();
+      BitcoindFactory.AssertEqualAndClear(
         "node3:clearAllBlacklists",
         "node3:addToPolicy/a,1||/b,2||");
 
 
       // Activate consensus - it should be propagated to all nodes
-      await domainLogic.SetCourtOrderStatusAsync(courtOrderHash1, CourtOrderStatus.FreezeConsensus, 100);
+      await CourtOrders.SetCourtOrderStatusAsync(courtOrderHash1, CourtOrderStatus.FreezeConsensus, 100);
+      await BackgroundJobs.StartPropagateFundsStatesAsync();
+      await BackgroundJobs.WaitAllAsync();
 
-      await backgroundJobs.WaitAllAsync();
-
-      bitcoindFactory.AssertEqualAndClear(
+      BitcoindFactory.AssertEqualAndClear(
         "node1:addToConsensus/a,1|100,|True/b,2|100,|True",
         "node2:addToConsensus/a,1|100,|True/b,2|100,|True",
         "node3:addToConsensus/a,1|100,|True/b,2|100,|True"
@@ -76,24 +76,24 @@ namespace BlacklistManager.Test.Functional
     {
       //arrange
       // see base.Initialize()
-      bitcoindFactory.Reset(null);
+      BitcoindFactory.Reset(null);
 
       // Act
-      await domainLogic.CreateNodeAsync(new Node("node1", 0, "mocked", "mocked", null));
+      await Nodes.CreateNodeAsync(new Node("node1", 0, "mocked", "mocked", null));
 
-      bitcoindFactory.AssertEqualAndClear(
+      BitcoindFactory.AssertEqualAndClear(
         "node1:getBlockCount",
         "node1:clearAllBlacklists"); 
       
       // We are able to retrieve a node
-      Assert.IsNotNull(domainLogic.GetNode("node1:0"));
+      Assert.IsNotNull(await Nodes.GetNodeAsync("node1:0"));
 
-      bitcoindFactory.DisconnectNode("node2");
+      BitcoindFactory.DisconnectNode("node2");
       
       // Node is disconnected, will not be added
-      Assert.ThrowsException<AggregateException>( () => domainLogic.CreateNodeAsync(new Node("node2", 0, "mocked", "mocked", null)).Result);
-      bitcoindFactory.AssertEqualAndClear(""); // no successful call was made
-      Assert.IsNull(domainLogic.GetNode("node2:0"));
+      await Assert.ThrowsExceptionAsync<BadRequestException>(async () => await Nodes.CreateNodeAsync(new Node("node2", 0, "mocked", "mocked", null)));
+      BitcoindFactory.AssertEqualAndClear(""); // no successful call was made
+      Assert.IsNull(await Nodes.GetNodeAsync("node2:0"));
     }
 
   }

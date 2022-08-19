@@ -11,13 +11,13 @@ namespace BlacklistManager.API.Rest
   public class BackgroundJobStarter : IHostedService
   {
     private readonly IBackgroundJobs backgroundJobs;
-    private readonly ILogger logger;
+    private readonly ILogger<BackgroundJobStarter> logger;
 
     public BackgroundJobStarter(
-      ILoggerFactory logger,
+      ILogger<BackgroundJobStarter> logger,
       IBackgroundJobs backgroundJobs)
     {
-      this.logger = logger.CreateLogger(LogCategories.API);
+      this.logger = logger;
       this.backgroundJobs = backgroundJobs;
     }
 

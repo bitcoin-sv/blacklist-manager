@@ -3,7 +3,7 @@
 using System;
 using System.Threading.Tasks;
 using BlacklistManager.API.Rest.ViewModels;
-using BlacklistManager.Domain.Actions;
+using BlacklistManager.Domain.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,23 +14,23 @@ namespace BlacklistManager.API.Rest.Controllers
   [Authorize]
   public class TxOutController : ControllerBase
   {
-    private readonly IQueryAction queryAction;
+    private readonly ICourtOrderRepository _courtOrderRepository;
 
     public TxOutController(
-      IQueryAction queryAction)
+      ICourtOrderRepository courtOrderRepository)
     {
-      this.queryAction = queryAction ?? throw new ArgumentNullException(nameof(queryAction));
+      _courtOrderRepository = courtOrderRepository ?? throw new ArgumentNullException(nameof(courtOrderRepository));
     }
 
     [HttpGet("{TxId}/{Vout}")]
-    public async Task<ActionResult<CourtOrderQuery.Fund>> GetAsync([FromRoute] TxOutViewModelGet tx)
+    public async Task<ActionResult<FundViewModel>> GetAsync([FromRoute] TxOutViewModelGet tx)
     {
-      var result = await queryAction.QueryFundByTxOutAsync(tx.TxId, tx.Vout);
+      var result = await _courtOrderRepository.QueryFundByTxOutAsync(tx.TxId, tx.Vout);
       if (result == null)
       {
         return NotFound();
       }
-      return Ok(result);
+      return Ok(new FundViewModel(result));
     }
   }
 }

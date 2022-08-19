@@ -8,6 +8,15 @@ namespace Common
 {
   public static class Consts
   {
+    public const string ApiKeyHeaderName = "X-Api-Key"; 
+    public const int EstimatedBlocksPerHour = 6;
+    public const int EstimatedMinutesPerBlock = 10;
+    public const string ConfiscationProtocolId = "63667478";
+    public const string ConfiscationProtocolVersion = "01";
+    public const string MinerIdProtocolPrefix = "ac1eed88";
+    
+    public const string HttpMethodNameGET = "Get";
+
     public static class BlockChainType
     {
       public const string BitcoinSV = "BSV";

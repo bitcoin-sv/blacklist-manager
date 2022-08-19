@@ -13,9 +13,9 @@ namespace BlacklistManager.Domain.Repositories
 
     Task<LegalEntityEndpoint> GetAsync(int id);
 
-    void UpdateDeltaLink(int legalEntityEndpointId, DateTime? lastContactedAt, string deltaLink);
+    Task UpdateDeltaLinkAsync(int legalEntityEndpointId, DateTime? lastContactedAt, string deltaLink, int processedOrdersCount);
 
-    void SetError(int legalEntityEndpointId, DateTime? lastContactedAt, string lastError, DateTime? lastErrorAt);
+    Task SetErrorAsync(int legalEntityEndpointId, string lastError, DateTime? lastErrorAt, bool increaseFailureCount);
 
     /// <summary>
     /// Legal entity is marked as enabled/disabled (validUntil=now/null)

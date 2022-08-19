@@ -1,6 +1,8 @@
 ﻿// Copyright (c) 2020 Bitcoin Association
 
+using Common;
 using Common.SmartEnums;
+using NBitcoin;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -33,6 +35,12 @@ namespace BlacklistManager.API.Rest.ViewModels
 
     [JsonPropertyName("freezeCourtOrderHash")]
     public string FreezeCourtOrderHash { get; set; }
+
+    [JsonPropertyName("destination")]
+    public ConfiscationDestinationVM Destination { get; set; }
+   
+    [JsonPropertyName("blockchain")]
+    public string Blockchain { get; set; }
 
     public CourtOrderViewModelCreate()
     {
@@ -72,16 +80,25 @@ namespace BlacklistManager.API.Rest.ViewModels
     }
 
 
-    public Domain.Models.CourtOrder ToDomainObject(string courtOrderHash)
+    public Domain.Models.CourtOrder ToDomainObject(string courtOrderHash, Network network)
     {
-      var courtOrder = new Domain.Models.CourtOrder(
-        this.CourtOrderId,
-        courtOrderHash,
-        (DocumentType)DocumentType,
-        ToDateTime(ValidFrom),
-        ToDateTime(ValidTo),
-        this.FreezeCourtOrderId,
-        this.FreezeCourtOrderHash);
+      var courtOrder = new Domain.Models.CourtOrder()
+      {
+        CourtOrderId = CourtOrderId,
+        CourtOrderHash = courtOrderHash,
+        DocumentType = (DocumentType)DocumentType,
+        ValidFrom = ToDateTime(ValidFrom),
+        ValidTo = ToDateTime(ValidTo),
+        FreezeCourtOrderId = FreezeCourtOrderId,
+        FreezeCourtOrderHash = FreezeCourtOrderHash,
+        Destination = new Domain.Models.ConfiscationDestination
+        {
+          Address = Destination?.Address,
+          Amount = Destination?.Amount
+        },
+        Status = Domain.Models.CourtOrderStatus.Imported,
+        Blockchain = Blockchain
+      };
 
       if (Funds != null)
       {
@@ -92,7 +109,8 @@ namespace BlacklistManager.API.Rest.ViewModels
           {
             courtOrder.AddFund(new Domain.Models.TxOut(
               fund.TxOut.TxId,
-              fund.TxOut.Vout ?? long.MinValue));
+              fund.TxOut.Vout ?? long.MinValue),
+              fund.Value);
           }
         }
       }
@@ -104,6 +122,9 @@ namespace BlacklistManager.API.Rest.ViewModels
       [JsonPropertyName("txOut")]
       public TxOut TxOut { get; set; }
 
+      [JsonPropertyName("value")]
+      public long Value { get; set; }
+
       public Fund()
       {
       }
@@ -111,6 +132,7 @@ namespace BlacklistManager.API.Rest.ViewModels
       public Fund(BlacklistManager.Domain.Models.Fund domain)
       {
         TxOut = new TxOut(domain.TxOut.TxId, domain.TxOut.Vout);
+        Value = domain.Value;
       }
     }
   }
@@ -134,4 +156,14 @@ namespace BlacklistManager.API.Rest.ViewModels
       Vout = vout;
     }
   }
+
+  public class ConfiscationDestinationVM
+  {
+    [JsonPropertyName("address")]
+    public string Address { get; set; }
+
+    [JsonPropertyName("amount")]
+    public long Amount { get; set; }
+  }
+
 }

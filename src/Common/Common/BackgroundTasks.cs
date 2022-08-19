@@ -17,22 +17,19 @@ namespace Common
   {
     private readonly IServiceProvider serviceProvider;
     private readonly ILogger<BackgroundTask> logger;
-
     public event Action<string, Task> TaskCreated;
+    private object objLock = new object();
+
+    // When task is completed it is kept in the group, but we return null as its progress,
+    // So this implementation detail is not observable to external users.
+    private readonly Dictionary<string, BackgroundTask> groups = new Dictionary<string, BackgroundTask>();
+    public Dictionary<string, BackgroundTask> Tasks => groups;
 
     public BackgroundTasks(IServiceProvider serviceProvider, ILogger<BackgroundTask> logger)
     {
       this.serviceProvider = serviceProvider;
       this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
-
-    protected object objLock = new object();
-
-    // When task is completed it is kept in the group, but we return null as its progress,
-    // So this implementation detail is not observable to external users.
-    protected readonly Dictionary<string, BackgroundTask> groups = new Dictionary<string, BackgroundTask>();
-
-    bool stoppingOrStopped;
 
     /// <summary>
     ///  Terminate old task from same group (if there are any) and start a new one
@@ -42,14 +39,14 @@ namespace Common
       BackgroundTask group;
       lock (objLock)
       {
-        if (stoppingOrStopped)
-        {
-          throw new InvalidOperationException("Can not start new tasks - already stopping or stopped");
-        }
         groups.TryGetValue(groupKey, out group);
       }
       if (group != null)
       {
+        if (group.Status == BackgroundTaskStatus.Cancelling)
+        {
+          throw new InvalidOperationException("Can not start new tasks - task is currently in process of canceling");
+        }
         await group.CancelTaskAsync();
       }
 
@@ -71,14 +68,14 @@ namespace Common
       BackgroundTask group;
       lock (objLock)
       {
-        if (stoppingOrStopped)
-        {
-          throw new InvalidOperationException("Can not start new tasks - already stopping or stopped");
-        }
         groups.TryGetValue(groupKey, out group);
       }
       if (group != null)
       {
+        if (group.Status == BackgroundTaskStatus.Cancelling)
+        {
+          throw new InvalidOperationException("Can not start new tasks - task is currently in process of canceling");
+        }
         await group.CancelTaskAsync();
       }
 
@@ -98,40 +95,72 @@ namespace Common
     {
       lock (objLock)
       {
-        if (!stoppingOrStopped && groups.TryGetValue(groupKey, out var group))
+        if (groups.TryGetValue(groupKey, out var group))
         {
-          return group.ProgressCounter;
+          if (group.Status == BackgroundTaskStatus.Started)
+          {
+            return group.ProgressCounter;
+          }
+          else
+          {
+            return null;
+          }
         }
         return null;
       }
     }
 
-    public string[] GetRunningGroups()
+    public string[] GetRunningTasks()
     {
       lock (objLock)
       {
-        if (stoppingOrStopped)
-        {
-          return new string[0];
-        }
-        return groups.Where(kv => kv.Value.ProgressCounter != null).Select(kv => kv.Key).ToArray();
+        return groups.Where(kv => (kv.Value.Status == BackgroundTaskStatus.Started || kv.Value.Status == BackgroundTaskStatus.Starting)).Select(kv => kv.Key).ToArray();
       }
     }
 
     public async Task StopAllAsync()
     {
       logger.LogDebug("Stopping all task groups");
-      lock (objLock)
-      {
-        stoppingOrStopped = true;
-      }
       // to prevent deadlocks this part of code must not be under lock statement
       //  - backgroundtask A is running and trying to start new backgroundtask B just before StopAll was called
-      foreach (var kv in groups)
+      foreach (var kv in groups.ToArray())
       {
-        await kv.Value.CancelTaskAsync();
+        if (kv.Value.Status == BackgroundTaskStatus.Started)
+        {
+          await kv.Value.CancelTaskAsync();
+        }
       }
       logger.LogDebug("Stopping completed");
+    }
+
+    private Task GetRunningTaskAsync(string groupKey)
+    {
+      lock (objLock)
+      {
+        if (groups.TryGetValue(groupKey, out var group))
+        {
+          if (group.Status == BackgroundTaskStatus.Started || group.Status == BackgroundTaskStatus.Starting)
+          {
+            return group.Task;
+          }
+          return Task.CompletedTask;
+        }
+        throw new Exception($"Task {groupKey} was not found.");
+      }
+    }
+
+    public async Task<bool> WaitUntilCompletedAsync(string groupKey, int timeUntilCancellation)
+    {
+      var cts = new CancellationTokenSource(timeUntilCancellation);
+      try
+      {
+        _ = await Task.WhenAny(GetRunningTaskAsync(groupKey), Task.Delay(int.MaxValue, cts.Token));
+        return !cts.IsCancellationRequested;
+      }
+      catch (Exception)
+      {
+        return false;
+      }
     }
   }
 }

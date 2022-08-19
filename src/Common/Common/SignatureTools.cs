@@ -3,8 +3,10 @@
 using NBitcoin;
 using NBitcoin.Crypto;
 using NBitcoin.DataEncoders;
+using NBitcoin.Protocol;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Net.Mime;
 using System.Text;
 using System.Text.Json;
@@ -57,12 +59,6 @@ namespace Common
       return Hashes.SHA256(bytes);
     }
 
-    public static bool VerifyJsonEnvelope(string jsonString)
-    {
-      var envelope = JsonSerializer.Deserialize<JsonEnvelope>(jsonString, SerializerOptions.SerializeOptions);
-      return VerifyJsonEnvelope(envelope);
-    }
-
     /// <summary>
     /// This method verifies signature against hash of payload instead of payload itself
     /// </summary>
@@ -70,14 +66,20 @@ namespace Common
     {
       var hashEnvelope = new JsonEnvelope
       {
-        Encoding = envelope.Encoding,
+        Encoding = Encoding.UTF8.BodyName.ToUpper(),
         Mimetype = envelope.Mimetype,
         PublicKey = envelope.PublicKey,
         Signature = envelope.Signature,
         SignatureType = envelope.SignatureType,
-        Payload = new uint256(SignatureTools.GetSigHash(envelope.Payload, "UTF-8")).ToString()
+        Payload = new uint256(SignatureTools.GetSigHash(envelope.Payload, envelope.Encoding)).ToString()
       };
       return VerifyJsonEnvelope(hashEnvelope);
+    }
+
+    public static bool VerifyJsonEnvelope(string jsonString)
+    {
+      var envelope = JsonEnvelope.ToObject(jsonString);
+      return VerifyJsonEnvelope(envelope);
     }
 
     public static bool VerifyJsonEnvelope(JsonEnvelope envelope)
@@ -142,9 +144,9 @@ namespace Common
 
       var key = Key.Parse(privateKeyWif, network);
 
-      var signature = key.SignMessage(hashHex);
+      var signature = SignMessage(hashHex, key);
 
-      return HelperTools.ConvertFromBase64ToHex(signature);      
+      return HelperTools.ConvertFromBase64ToHex(signature);
     }
 
     public static string CreateSignature(string payload, string encoding, string mimetype, string privateKeyWif)
@@ -170,7 +172,7 @@ namespace Common
         SignatureType = Consts.JsonSignatureType.Bitcoin
       };
 
-      return HelperTools.JSONSerializeNewtonsoft(envelope, true);
+      return envelope.ToJson();
     }
 
     public static string CreateJSonSignature(string json, string privateKeyWif)
@@ -185,11 +187,11 @@ namespace Common
       string messageSignature;
       if (hashPayload)
       {
-        messageSignature = key.SignMessage(new uint256(GetSigHash(json, Encoding.UTF8.BodyName.ToUpper())).ToString());
+        messageSignature = SignMessage(new uint256(GetSigHash(json, Encoding.UTF8.BodyName.ToUpper())).ToString(), key);
       }
       else
       {
-        messageSignature = key.SignMessage(json);
+        messageSignature = SignMessage(json, key);
       }
 
       var envelope = new JsonEnvelope
@@ -202,7 +204,7 @@ namespace Common
         SignatureType = Consts.JsonSignatureType.BitcoinMessage
       };
 
-      return JsonSerializer.Serialize(envelope, SerializerOptions.SerializeOptions);
+      return envelope.ToJson();
     }
 
     public static bool VerifyBitcoinSignature(string jsonPayload, string signature, string publicKey, out string pubKeyHex, string address = null, Network network = null)
@@ -211,7 +213,7 @@ namespace Common
       PubKey pubKey;
       try
       {
-        pubKey = PubKey.RecoverFromMessage(jsonPayload, signature);
+        pubKey = RecoverFromMessage(jsonPayload, signature);
       }
       catch
       {
@@ -237,6 +239,67 @@ namespace Common
       }
       return !string.IsNullOrEmpty(publicKey) && pubKey.ToHex() == publicKey;
     }
-  }
 
+    #region Sign&Recover private methods
+
+    // Part of this code is based on https://github.com/MetacoSA/NBitcoin which is licensed under MIT license
+
+    private static PubKey RecoverFromMessage(string messageText, string signatureText)
+    {
+      var signatureEncoded = Encoders.Base64.DecodeData(signatureText);
+
+      var message = FormatMessageForSigning(Encoding.UTF8.GetBytes(messageText));
+      var hash = Hashes.DoubleSHA256(message);
+
+      var s = signatureEncoded.AsSpan();
+      int recid = (s[0] - 27) & 3;
+
+      return PubKey.RecoverCompact(hash, new CompactSignature(recid, s.Slice(1).ToArray()));
+    }
+
+    private static string SignMessage(string message, Key key)
+    {
+      if (message is null)
+      {
+        throw new ArgumentNullException(nameof(message));
+      }
+      if (key is null)
+      {
+        throw new ArgumentNullException(nameof(key));
+      }
+
+      byte[] data = FormatMessageForSigning(Encoding.UTF8.GetBytes(message));
+      var hash = Hashes.DoubleSHA256(data);
+
+      var sig = key.SignCompact(hash);
+      Span<byte> vchSig = stackalloc byte[65];
+      sig.Signature.CopyTo(vchSig.Slice(1));
+      vchSig[0] = (byte)(27 + sig.RecoveryId);
+
+      return Convert.ToBase64String(vchSig.ToArray());
+    }
+
+    private static String BITCOIN_SIGNED_MESSAGE_HEADER = "Bitcoin Signed Message:\n";
+    private static byte[] BITCOIN_SIGNED_MESSAGE_HEADER_BYTES = Encoding.UTF8.GetBytes(BITCOIN_SIGNED_MESSAGE_HEADER);
+
+    private static byte[] FormatMessageForSigning(byte[] messageBytes)
+    {
+      MemoryStream ms = new MemoryStream();
+
+      ms.WriteByte((byte)BITCOIN_SIGNED_MESSAGE_HEADER_BYTES.Length);
+      Write(ms, BITCOIN_SIGNED_MESSAGE_HEADER_BYTES);
+
+      VarInt size = new VarInt((ulong)messageBytes.Length);
+      Write(ms, size.ToBytes());
+      Write(ms, messageBytes);
+      return ms.ToArray();
+    }
+
+    private static void Write(MemoryStream ms, byte[] bytes)
+    {
+      ms.Write(bytes, 0, bytes.Length);
+    }
+
+    #endregion
+  }
 }

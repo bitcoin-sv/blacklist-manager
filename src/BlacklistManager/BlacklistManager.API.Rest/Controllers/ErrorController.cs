@@ -28,9 +28,13 @@ namespace BlacklistManager.API.Rest.Controllers
       var ex = HttpContext.Features.Get<IExceptionHandlerPathFeature>().Error;
 
       statusCode = (int)HttpStatusCode.InternalServerError;
-      if (ex is HttpResponseException)
+      if (ex is HttpResponseException httpResponseException)
       {
-        statusCode = ((HttpResponseException)ex).Status;
+        statusCode = httpResponseException.Status;
+      }
+      if (ex is Npgsql.PostgresException)
+      {
+        statusCode = (int)HttpStatusCode.BadRequest;
       }
 
       _logger.LogError("Exception during API execution. Status: {0}. Exception:{1}{2}",

@@ -25,9 +25,9 @@ namespace BlacklistManager.Test.Functional
     }
 
     [TestCleanup]
-    public void TestCleanup()
+    public async Task TestCleanupAsync()
     {
-      base.Cleanup();
+      await base.CleanupAsync();
     }
 
     [TestMethod]
@@ -37,20 +37,20 @@ namespace BlacklistManager.Test.Functional
       // see base.Initialize()
 
       // freeze for A,99 
-      var order1Hash = await Utils.SubmitFreezeOrderAsync(client,
-        ("A", 99));
-      await backgroundJobs.WaitForCourtOrderProcessingAsync();
+      var order1Hash = await Utils.SubmitFreezeOrderAsync(Client,
+        (1000, "A", 99));
+      await BackgroundJobs.WaitForCourtOrderProcessingAsync();
 
-      var fund = await Utils.QueryFundAsync(client, "A", 99);
+      var fund = await Utils.QueryFundAsync(Client, "A", 99);
       Assert.IsNotNull(fund);
 
-      fund = await Utils.QueryFundAsync(client, "a", 99);
+      fund = await Utils.QueryFundAsync(Client, "a", 99);
       Assert.IsNotNull(fund);
 
-      await domainLogic.CreateNodeAsync(new BlacklistManager.Domain.Models.Node("node1", 0, "mocked", "mocked", null));
-      await backgroundJobs.WaitAllAsync();
+      await Nodes.CreateNodeAsync(new BlacklistManager.Domain.Models.Node("node1", 0, "mocked", "mocked", null));
+      await BackgroundJobs.WaitAllAsync();
 
-      bitcoindFactory.AssertEqualAndClear(
+      BitcoindFactory.AssertEqualAndClear(
         "node1:addToPolicy/a,99||"
       );
     }
@@ -62,30 +62,30 @@ namespace BlacklistManager.Test.Functional
       // see base.Initialize()
 
     // freeze for A,99 
-    var order1Hash = await Utils.SubmitFreezeOrderAsync(client,
-        ("A", 99));      
-      await backgroundJobs.WaitForCourtOrderProcessingAsync();
+    var order1Hash = await Utils.SubmitFreezeOrderAsync(Client,
+        (1000, "A", 99));      
+      await BackgroundJobs.WaitForCourtOrderProcessingAsync();
 
-      var fund = await Utils.QueryFundAsync(client, "A", 99);
+      var fund = await Utils.QueryFundAsync(Client, "A", 99);
       AssertExtension.AreEqual($"a,99|{order1Hash},,,", fund);
 
       // unfreeze for A,99
-      var order2Hash = await Utils.SubmitUnfreezeOrderAsync(client, order1Hash,
-        ("A", 99));
-      await backgroundJobs.WaitForCourtOrderProcessingAsync();
+      var order2Hash = await Utils.SubmitUnfreezeOrderAsync(Client, order1Hash,
+        (1000, "A", 99));
+      await BackgroundJobs.WaitForCourtOrderProcessingAsync();
 
-      fund = await Utils.QueryFundAsync(client, "A", 99);
+      fund = await Utils.QueryFundAsync(Client, "A", 99);
       AssertExtension.AreEqual($"a,99|{order1Hash},{order2Hash},,", fund);
 
       // consensus for freeze order1
-      await domainLogic.SetCourtOrderStatusAsync(order1Hash, CourtOrderStatus.FreezeConsensus, 100);
-      await backgroundJobs.WaitForCourtOrderProcessingAsync();
+      await CourtOrders.SetCourtOrderStatusAsync(order1Hash, CourtOrderStatus.FreezeConsensus, 100);
+      await BackgroundJobs.WaitForCourtOrderProcessingAsync();
 
       // consensus for unfreeze order1
-      await domainLogic.SetCourtOrderStatusAsync(order2Hash, CourtOrderStatus.UnfreezeConsensus, 200);
-      await backgroundJobs.WaitForCourtOrderProcessingAsync();
+      await CourtOrders.SetCourtOrderStatusAsync(order2Hash, CourtOrderStatus.UnfreezeConsensus, 200);
+      await BackgroundJobs.WaitForCourtOrderProcessingAsync();
 
-      fund = await Utils.QueryFundAsync(client, "A", 99);
+      fund = await Utils.QueryFundAsync(Client, "A", 99);
       AssertExtension.AreEqual($"a,99|{order1Hash},{order2Hash},100,200", fund);
     }
 
@@ -96,7 +96,7 @@ namespace BlacklistManager.Test.Functional
       // see base.Initialize()
 
       //act
-      var response = await client.GetAsync(BlacklistManagerServer.Get.GetTxOut("A", 99));
+      var response = await Client.GetAsync(BlacklistManagerServer.Get.GetTxOut("A", 99));
 
       //assert 
       Assert.AreEqual(HttpStatusCode.NotFound, response.StatusCode);
@@ -109,7 +109,7 @@ namespace BlacklistManager.Test.Functional
       // see base.Initialize()
 
       //act
-      var response = await client.GetAsync(BlacklistManagerServer.Get.GetTxOut("A", -1));
+      var response = await Client.GetAsync(BlacklistManagerServer.Get.GetTxOut("A", -1));
       var responseContent = await response.Content.ReadAsStringAsync();
 
       //assert 

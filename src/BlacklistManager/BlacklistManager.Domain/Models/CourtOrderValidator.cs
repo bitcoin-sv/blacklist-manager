@@ -28,7 +28,7 @@ namespace BlacklistManager.Domain.Models
         errors.Add("'documentType' is required");
       }
 
-      if (!(courtOrder.DocumentType == DocumentType.FreezeOrder || courtOrder.DocumentType == DocumentType.UnfreezeOrder))
+      if (!(courtOrder.DocumentType == DocumentType.FreezeOrder || courtOrder.DocumentType == DocumentType.UnfreezeOrder || courtOrder.DocumentType == DocumentType.ConfiscationOrder))
       {
         errors.Add("Invalid value for 'documentType'");
       }
@@ -54,8 +54,7 @@ namespace BlacklistManager.Domain.Models
           ValidateFunds(courtOrder.Funds, errors);
         }
       }
-
-      else if (courtOrder.DocumentType == DocumentType.UnfreezeOrder)
+      else if (courtOrder.DocumentType == DocumentType.UnfreezeOrder || courtOrder.DocumentType == DocumentType.ConfiscationOrder)
       {
         if (string.IsNullOrWhiteSpace(courtOrder.FreezeCourtOrderId))
         {

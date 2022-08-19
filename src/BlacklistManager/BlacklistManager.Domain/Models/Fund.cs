@@ -5,32 +5,34 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using static Common.BitcoinRpc.Requests.RpcFrozenFunds.RpcFund;
+using static Common.BitcoinRpcClient.Requests.RpcFrozenFunds.RpcFund;
 
 namespace BlacklistManager.Domain.Models
 {
   public class Fund
   {
-    public Fund(TxOut txOut)
+    public Fund(TxOut txOut, long value)
     {
       TxOut = txOut;
+      Value = value;
       Status = FundStatus.Imported;
       EnforceAtHeight = new EnforceAtHeightList();
       Reason = string.Empty;
     }
 
-    public Fund(TxOut txOut, string reason) : this(txOut)
+    public Fund(TxOut txOut, long value, string reason) : this(txOut, value)
     {
       Reason = reason;
     }
 
-    public Fund(string txId, Int64 vout, FundStatus fundStatus) : this(txId, vout, (int)fundStatus)
+    public Fund(string txId, long vout, long value, FundStatus fundStatus) : this(txId, vout, value, (int)fundStatus)
     {
     }
 
-    public Fund(string txid, Int64 vout, Int32 status)
+    public Fund(string txid, long vout, long value, int status)
     {
       TxOut = new TxOut(txid, vout);
+      Value = value;
       Status = (FundStatus)status;
       EnforceAtHeight = new EnforceAtHeightList();
     }
@@ -49,6 +51,8 @@ namespace BlacklistManager.Domain.Models
     public bool PolicyExpiresWithConsensus => !EnforceAtHeight.ContainsIsPolicyFrozen;
 
     public string Reason { get; private set; }
+
+    public long Value { get; private set; }
 
     /// <summary>
     /// Effective status as calculated by taking into account all court orders
@@ -89,6 +93,11 @@ namespace BlacklistManager.Domain.Models
     public override string ToString()
     {
       return $"TxOut=({TxOut}), Status={Status}, EnforceAtHeight=({EnforceAtHeight})";
+    }
+
+    public override int GetHashCode()
+    {
+      return TxOut.GetHashCode();
     }
   }
 
@@ -179,12 +188,20 @@ namespace BlacklistManager.Domain.Models
 
     public IReadOnlyCollection<EnforceAtHeight> List => list;
 
+    public void AddOnlyUnique(EnforceAtHeight enforceAtHeight)
+    {
+      if (!Contains(enforceAtHeight))
+      {
+        list.Add(enforceAtHeight);
+      }
+    }
+
     public void Add(EnforceAtHeight enforceAtHeight)
     {
       list.Add(enforceAtHeight);
     }
 
-    public bool Contains(EnforceAtHeight enforceAtHeight)
+    private bool Contains(EnforceAtHeight enforceAtHeight)
     {
       if (enforceAtHeight == null)
       {

@@ -2,6 +2,7 @@
 
 using System.IO;
 using System.Reflection;
+using BlacklistManager.API.Rest;
 using System.Threading.Tasks;
 using Common;
 using Microsoft.AspNetCore.Hosting;
@@ -60,7 +61,7 @@ namespace BlacklistManager.Test.Functional.Server
       createTestDb.DoCreateTestDatabase(out _, out _);
 
       var startup = scope.ServiceProvider.GetRequiredService<IStartupChecker>();
-      await startup.CheckAsync(true);
+      await startup.CheckAsync();
       host.Start();
       return host.GetTestServer();
     }

@@ -1,10 +1,10 @@
 # Copyright (c) 2020 Bitcoin Association
 
-FROM mcr.microsoft.com/dotnet/core/aspnet:3.1-buster-slim AS base
+FROM mcr.microsoft.com/dotnet/aspnet:6.0 AS base
 WORKDIR /app
 EXPOSE 80
 
-FROM mcr.microsoft.com/dotnet/core/sdk:3.1-buster AS build
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
 ARG APPVERSION
 WORKDIR /src
 COPY ["BlacklistManager/BlacklistManager.API.Rest/BlacklistManager.API.Rest.csproj", "BlacklistManager/BlacklistManager.API.Rest/"]
@@ -18,18 +18,18 @@ RUN dotnet restore "BlacklistManager/BlacklistManager.API.Rest/BlacklistManager.
 RUN dotnet restore "BlacklistManager/BlacklistManager.Cli/BlacklistManager.Cli.csproj"
 COPY . .
 WORKDIR "/src/BlacklistManager/BlacklistManager.API.Rest"
-RUN dotnet build "BlacklistManager.API.Rest.csproj" -c Release /p:Version=$APPVERSION -o /app/build
+RUN dotnet build "BlacklistManager.API.Rest.csproj" --no-restore -c Release /p:Version=$APPVERSION -o /app/build
 WORKDIR "/src/BlacklistManager/BlacklistManager.Cli"
-RUN dotnet build "BlacklistManager.Cli.csproj" -c Release /p:Version=$APPVERSION -o /app/buildcli
+RUN dotnet build "BlacklistManager.Cli.csproj" --no-restore -c Release /p:Version=$APPVERSION -o /app/buildcli
 
 FROM build AS publish
 ARG APPVERSION
 WORKDIR "/src/BlacklistManager/BlacklistManager.API.Rest"
-RUN dotnet publish "BlacklistManager.API.Rest.csproj" -c Release /p:Version=$APPVERSION -o /app/publish
+RUN dotnet publish "BlacklistManager.API.Rest.csproj" --no-restore -c Release /p:Version=$APPVERSION -o /app/publish
 WORKDIR "/src/BlacklistManager/BlacklistManager.Cli"
-RUN dotnet publish "BlacklistManager.Cli.csproj" -c Release /p:Version=$APPVERSION -o /app/publishcli
+RUN dotnet publish "BlacklistManager.Cli.csproj" --no-restore -c Release /p:Version=$APPVERSION -o /app/publishcli
 
-FROM mcr.microsoft.com/dotnet/core/sdk:3.1 AS tools-install
+FROM mcr.microsoft.com/dotnet/sdk:6.0 AS tools-install
 RUN dotnet tool install --tool-path /dotnetcore-tools dotnet-sos
 RUN dotnet tool install --tool-path /dotnetcore-tools dotnet-trace
 RUN dotnet tool install --tool-path /dotnetcore-tools dotnet-dump

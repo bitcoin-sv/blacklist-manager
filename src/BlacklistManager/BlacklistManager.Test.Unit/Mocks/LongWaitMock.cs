@@ -9,9 +9,9 @@ namespace BlacklistManager.Test.Unit.Mocks
   /// <summary>
   /// This mocked class version does not mock any logic code but only mocks time functions
   /// </summary>
-  public class LongWaitMock : BlacklistManager.Domain.BackgroundJobs.LongWait
+  public class LongWaitMock : BlacklistManager.Infrastructure.BackgroundJobs.LongWait
   {
-    private int delayOverride;
+    readonly int delayOverride;
 
     public LongWaitMock(int delay = 0)
     {

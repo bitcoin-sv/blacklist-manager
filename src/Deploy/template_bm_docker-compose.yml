@@ -23,10 +23,15 @@ services:
   environment:
    - BlacklistManagerConnectionStrings:DBConnectionString=Server=bmdata;Port=5432;User Id=frozenfund;Database=frozenfund;Password=${BMAPP_DB_PASSWORD};
    - BlacklistManagerConnectionStrings:DBConnectionStringMaster=Server=bmdata;Port=5432;User Id=postgres;Database=frozenfund;Password=${POSTGRESDB_PASSWORD};
+   - AppSettings:BlockChain=${BLOCKCHAIN}
    - AppSettings:BitcoinNetwork=${BITCOIN_NETWORK}
    - AppSettings:EncryptionKey=${ENCRYPTION_KEY}
    - AppSettings:REST_APIKey=${BMAPP_REST_APIKEY}
    - AppSettings:BackgroundJobDelayTime=${BACKGROUND_JOB_DELAY_TIME}
+   - AppSettings:ConsensusActivationRetryDelayTime=${CONSENSUS_ACTIVATION_DELAY_TIME}
+   - AppSettings:OnErrorRetryDelayTime=${ERROR_RETRY_DELAY_TIME}
+   - AppSettings:ConsensusWaitDays=${CONSENSUS_WAIT_DAYS}
+
   networks:
    - bmnetwork
   volumes:

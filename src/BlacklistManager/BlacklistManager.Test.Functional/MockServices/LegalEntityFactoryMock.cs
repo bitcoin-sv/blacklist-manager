@@ -21,7 +21,7 @@ namespace BlacklistManager.Test.Functional.MockServices
       courtOrderAcceptanceRequest = new Dictionary<string, string>();
     }
 
-    public ILegalEntity Create(string baseUrl, string apiKey)
+    public ILegalEntity Create(string baseUrl, string deltaLink, string apiKeyName, string apiKey, int? legalEntityClientId)
     {
       var legalEntityMock = new LegalEntityMock(
         consensusActivationResponse,
